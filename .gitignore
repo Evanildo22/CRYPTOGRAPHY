@@ -1,0 +1,27 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+storage/files/*.enc
+storage/files/*.meta
+storage/keys/*.key
+storage/keys/*.ecpub
+storage/sigs/*.sig
+storage/fingerprints/*.sha256
+storage/audit/*.log
+.vscode/
+.DS_Store
+**/.DS_Store
+*.egg-info/
+dist/
+build/
+
+# Local reference — not for public repo
+Secure_File_Share_Report.docx
+Secure_File_Share_Project_Guide.docx
+Cybersecurity_project_blueprint.pdf
+.github/GITHUB_SETUP.md

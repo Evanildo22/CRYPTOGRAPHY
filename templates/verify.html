@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Verify Signature — SecureShare{% endblock %}
+
+{% block content %}
+<h2>Verify file integrity</h2>
+
+{% if needs_key %}
+  <p>Paste the sender's RSA public key to verify file <code>{{ file_id }}</code>.</p>
+  <form method="GET">
+    <div class="form-field">
+      <label for="public_key">Sender's RSA public key <span class="label-hint">(PEM)</span></label>
+      <textarea id="public_key" name="public_key" rows="8" required placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
+    </div>
+    <button type="submit">Verify signature</button>
+  </form>
+{% elif ok is none %}
+  <p>Verification result unavailable.</p>
+{% elif ok %}
+  <div class="alert alert-success">
+    <strong>Signature valid</strong> — This file has not been altered since it was uploaded.
+  </div>
+  <p>File ID: <code>{{ file_id }}</code></p>
+  <p><a href="{{ url_for('download_page', file_id=file_id) }}">Proceed to decrypt</a></p>
+{% else %}
+  <div class="alert alert-error">
+    <strong>Signature invalid</strong> — This file may have been tampered with, or the wrong public key was provided.
+  </div>
+  <p>File ID: <code>{{ file_id }}</code></p>
+{% endif %}
+{% endblock %}

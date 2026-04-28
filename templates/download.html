@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Decrypt {{ file_id[:8] }} — SecureShare{% endblock %}
+
+{% block content %}
+<h2>Decrypt your file</h2>
+
+<div class="file-info">
+  <table>
+    <tr><th>File ID</th><td><code>{{ file_id }}</code></td></tr>
+    <tr><th>Filename</th><td><code>{{ filename }}</code></td></tr>
+    <tr><th>Mode</th><td><code>{{ mode }}</code></td></tr>
+    <tr><th>File fingerprint</th><td><code class="fingerprint">{{ fingerprint }}</code></td></tr>
+  </table>
+  <p class="hint">Verify the file after downloading: <code>sha256sum &lt;filename&gt;</code></p>
+</div>
+
+<form method="POST">
+  <div class="form-field">
+    <label for="rsa_public_key">Sender's public key <span class="label-hint">— RSA (PEM), for signature verification</span></label>
+    <textarea id="rsa_public_key" name="rsa_public_key" rows="8" required placeholder="BEGIN PUBLIC KEY"></textarea>
+  </div>
+
+  {% if mode == "RSA" %}
+  <div class="form-field">
+    <label for="rsa_private_key">Your private key <span class="label-hint">— RSA (PEM), for decryption</span></label>
+    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" required placeholder="BEGIN PRIVATE KEY"></textarea>
+  </div>
+  {% else %}
+  <div class="form-field">
+    <label for="ec_private_key">Your private key <span class="label-hint">— EC (PEM), for decryption</span></label>
+    <textarea id="ec_private_key" name="ec_private_key" rows="8" required placeholder="BEGIN PRIVATE KEY"></textarea>
+  </div>
+  {% endif %}
+
+  <div class="form-field">
+    <label for="password">Password <span class="label-hint">— the one set at upload</span></label>
+    <input id="password" name="password" type="password" autocomplete="current-password" />
+  </div>
+
+  <button type="submit" class="btn-primary">Verify &amp; Decrypt</button>
+</form>
+{% endblock %}

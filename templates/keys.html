@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Key Generator — SecureShare{% endblock %}
+
+{% block content %}
+<h2>Generate your keys</h2>
+<p>Create RSA-2048 and P-256 EC keypairs. <strong>Your private keys are never stored — copy them before leaving this page.</strong></p>
+
+<form method="POST">
+  <fieldset>
+    <legend>Key type</legend>
+    <label><input type="radio" name="key_type" value="both" checked /> RSA + EC — both modes</label>
+    <label><input type="radio" name="key_type" value="rsa" /> RSA only — Mode A</label>
+    <label><input type="radio" name="key_type" value="ec"  /> EC only — Mode B</label>
+  </fieldset>
+  <button type="submit">Generate</button>
+</form>
+
+{% if rsa_priv %}
+<section class="key-display">
+  <h3>RSA-2048 Private Key</h3>
+  <p class="warn">Keep this secret. Used for signing and Mode A decryption.</p>
+  <textarea readonly rows="20">{{ rsa_priv }}</textarea>
+
+  <h3>RSA-2048 Public Key</h3>
+  <p>Share this freely. Used for signature verification and Mode A encryption.</p>
+  <textarea readonly rows="9">{{ rsa_pub }}</textarea>
+</section>
+{% endif %}
+
+{% if ec_priv %}
+<section class="key-display">
+  <h3>P-256 EC Private Key</h3>
+  <p class="warn">Keep this secret. Used for Mode B decryption.</p>
+  <textarea readonly rows="8">{{ ec_priv }}</textarea>
+
+  <h3>P-256 EC Public Key</h3>
+  <p>Share this freely. Senders use it to encrypt files for you.</p>
+  <textarea readonly rows="6">{{ ec_pub }}</textarea>
+</section>
+{% endif %}
+{% endblock %}

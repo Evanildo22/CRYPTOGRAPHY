@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Activity Log — SecureShare{% endblock %}
+
+{% block content %}
+<h2>Activity Log</h2>
+<p>All uploads and downloads are recorded and cryptographically sealed. Entries marked <span class="tampered">TAMPERED</span> have a non-matching integrity check — the record may have been altered after the fact.</p>
+
+{% if not entries %}
+  <p>No activity recorded yet.</p>
+{% else %}
+<div class="table-wrapper">
+  <table class="audit-table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Event</th>
+        <th>File</th>
+        <th>Mode</th>
+        <th>IP</th>
+        <th>Integrity</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr class="{{ 'tampered' if not entry.hmac_ok else '' }}">
+        <td>{{ entry.get('timestamp', '—') }}</td>
+        <td><code>{{ entry.get('event_type', '—') }}</code></td>
+        <td><code>{{ entry.get('file_id', '—')[:8] }}…</code></td>
+        <td>{{ entry.get('mode', '—') }}</td>
+        <td>{{ entry.get('ip_address', '—') }}</td>
+        <td>
+          {% if entry.hmac_ok %}
+            <span class="ok">OK</span>
+          {% else %}
+            <span class="tampered">TAMPERED</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p>{{ entries | length }} total entries.</p>
+{% endif %}
+{% endblock %}

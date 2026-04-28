@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Secure File Share — Upload{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Secure File Share</h1>
+  <p>Hybrid encryption with two key-exchange modes, digital signatures, perfect forward secrecy, and a tamper-evident audit log.</p>
+</section>
+
+<section class="concepts">
+  <div class="concept-grid">
+    <div class="concept-card">
+      <h3>Mode A — RSA Key Transport</h3>
+      <p>A random AES-256 session key is wrapped with the recipient's RSA-2048 public key (OAEP). Only the matching private key can decrypt the file.</p>
+    </div>
+    <div class="concept-card">
+      <h3>Mode B — ECDH + PFS</h3>
+      <p>An ephemeral P-256 keypair is generated, ECDH + HKDF derive the AES key, and the ephemeral private key is immediately destroyed. Compromise of the long-term key cannot expose past sessions.</p>
+    </div>
+    <div class="concept-card">
+      <h3>Signatures</h3>
+      <p>Every ciphertext is signed with RSA-PSS-SHA-256. Verification is the first operation on download — any tampering aborts the request.</p>
+    </div>
+    <div class="concept-card">
+      <h3>Audit Log</h3>
+      <p>Every security event is recorded with an HMAC-SHA256 tag. Edits to past entries are detectable without the server secret.</p>
+    </div>
+  </div>
+</section>
+
+<section class="upload-section">
+  <h2>Upload a File</h2>
+  <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+
+    <label for="file">File</label>
+    <input id="file" name="file" type="file" required />
+
+    <label for="password">Password (used to derive KEK via PBKDF2)</label>
+    <input id="password" name="password" type="password" required autocomplete="new-password" />
+
+    <fieldset>
+      <legend>Encryption Mode</legend>
+      <label>
+        <input type="radio" name="mode" value="A" checked /> Mode A — RSA Key Transport
+      </label>
+      <label>
+        <input type="radio" name="mode" value="B" /> Mode B — ECDH + Perfect Forward Secrecy
+      </label>
+    </fieldset>
+
+    <div id="mode-a-keys">
+      <label for="rsa_public_key">Recipient RSA Public Key (PEM)</label>
+      <textarea id="rsa_public_key" name="rsa_public_key" rows="8" placeholder="BEGIN PUBLIC KEY"></textarea>
+    </div>
+
+    <div id="mode-b-keys" style="display:none;">
+      <label for="ec_public_key">Recipient EC Public Key (PEM)</label>
+      <textarea id="ec_public_key" name="ec_public_key" rows="8" placeholder="BEGIN PUBLIC KEY"></textarea>
+    </div>
+
+    <label for="rsa_private_key">Signer RSA Private Key (PEM) — for digital signature</label>
+    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" placeholder="BEGIN PRIVATE KEY"></textarea>
+
+    <button type="submit">Encrypt &amp; Upload</button>
+  </form>
+</section>
+
+<script src="{{ url_for('static', filename='js/mode_toggle.js') }}"></script>
+{% endblock %}
