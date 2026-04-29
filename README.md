@@ -6,7 +6,7 @@
 ![Tests](https://img.shields.io/badge/tests-83%20unit%20%2B%206%20benchmarks-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-A web application that demonstrates end-to-end applied cryptography: files are encrypted before storage, every ciphertext is signed to prove uploader identity, and every security event is written to a tamper-evident audit log. The system offers two encryption modes — RSA key transport and ECDH with perfect forward secrecy — so the same upload pipeline illustrates both how traditional PKI works and how ephemeral key agreement (the mechanism behind TLS 1.3 and Signal) provides a stronger forward-secrecy guarantee. Nothing in this project is theoretical: every primitive is wired into a running Flask application with 83 unit tests that verify tamper detection, round-trip correctness, and the no-disk-write guarantee for ephemeral keys.
+A web application that demonstrates end-to-end applied cryptography: files are encrypted before storage, every ciphertext is signed to prove uploader identity, and every security event is written to a tamper-evident audit log. The system offers two encryption modes, RSA key transport and ECDH with perfect forward secrecy, so the same upload pipeline illustrates both how traditional PKI works and how ephemeral key agreement (the mechanism behind TLS 1.3 and Signal) provides a stronger forward-secrecy guarantee. Nothing in this project is theoretical: every primitive is wired into a running Flask application with 83 unit tests that verify tamper detection, round-trip correctness, and the no-disk-write guarantee for ephemeral keys.
 
 > **Threat model:** [`THREAT_MODEL.md`](THREAT_MODEL.md) covers assets, seven adversary profiles, attack trees for each threat, mitigations with residual risks, and an explicit list of what this system does *not* protect against.
 
@@ -38,8 +38,8 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 │  /upload                          /download/<id>         /audit         │
 │    │                                │                      │            │
 │    ▼                                ▼                      ▼            │
-│  crypto/kdf.py              crypto/signatures.py     audit/log.py      │
-│  PBKDF2 → KEK               RSA-PSS verify first     HMAC re-verify    │
+│  crypto/kdf.py              crypto/signatures.py     audit/log.py       │
+│  PBKDF2 → KEK               RSA-PSS verify first     HMAC re-verify     │
 │    │                                │                                   │
 │    ├── Mode A ──────────────────────┤                                   │
 │    │   crypto/rsa_keys.py           │                                   │
@@ -53,15 +53,15 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 │        zero + discard priv key      │                                   │
 │            │                        │                                   │
 │            ▼                        ▼                                   │
-│        crypto/aes.py            crypto/aes.py                          │
-│        AES-256-GCM encrypt      AES-256-GCM decrypt                    │
+│        crypto/aes.py            crypto/aes.py                           │
+│        AES-256-GCM encrypt      AES-256-GCM decrypt                     │
 │            │                        │                                   │
 │            ▼                        ▼                                   │
-│        crypto/signatures.py     crypto/fingerprint.py                  │
+│        crypto/signatures.py     crypto/fingerprint.py                   │
 │        RSA-PSS sign              SHA-256 recompute + compare            │
 │            │                                                            │
 │            ▼                                                            │
-│        audit/log.py  ← HMAC-SHA256 entry appended after every event    │
+│        audit/log.py  ← HMAC-SHA256 entry appended after every event     │
 └──────────────────────────────────┬──────────────────────────────────────┘
                                    │ local filesystem
 ┌──────────────────────────────────▼──────────────────────────────────────┐
@@ -88,9 +88,9 @@ File + Password + Mode
        │          RSA-OAEP wrap with recipient public key → .key
        │
        └─ Mode B: ephemeral P-256 keygen  (crypto/pfs.py)
-                  ECDH + HKDF-SHA256 → AES-256 session key
-                  ephemeral private key zeroed + discarded immediately
-                  ephemeral public key stored → .ecpub
+       |          ECDH + HKDF-SHA256 → AES-256 session key
+       |          ephemeral private key zeroed + discarded immediately
+       |          ephemeral public key stored → .ecpub
        │
        ├─ AES-256-GCM encrypt plaintext → .enc  (tag prepended for early rejection)
        ├─ RSA-PSS-SHA256 sign ciphertext → .sig
@@ -235,9 +235,9 @@ Every decision in this codebase has a specific failure mode if made differently.
 
 AES-ECB (Electronic Codebook) encrypts each 16-byte block independently with the same key. The consequence is structural: identical plaintext blocks produce identical ciphertext blocks. The encrypted output leaks the pattern of the underlying data.
 
-The canonical demonstration is the ECB penguin — encrypting a bitmap image with AES-ECB produces ciphertext that still visibly resembles the original image because uniform regions of pixels encrypt to uniform regions of ciphertext.
+The canonical demonstration is the ECB penguin, encrypting a bitmap image with AES-ECB produces ciphertext that still visibly resembles the original image because uniform regions of pixels encrypt to uniform regions of ciphertext.
 
-In a file-sharing context, an attacker who intercepts two ciphertext files can determine whether they share any 16-byte-aligned blocks — revealing partial content, structural similarity, or duplicate uploads without breaking the key.
+In a file-sharing context, an attacker who intercepts two ciphertext files can determine whether they share any 16-byte-aligned blocks, revealing partial content, structural similarity, or duplicate uploads without breaking the key.
 
 ECB also provides no authentication. An attacker can rearrange, delete, or splice ciphertext blocks and the recipient has no way to detect the modification.
 
@@ -247,7 +247,7 @@ ECB also provides no authentication. An attacker can rearrange, delete, or splic
 
 ### 2. Reusing an IV under the same key
 
-AES-GCM's security guarantee collapses completely when an IV is reused with the same key. This is not a gradual degradation — it is a catastrophic failure.
+AES-GCM's security guarantee collapses completely when an IV is reused with the same key. This is not a gradual degradation, it is a catastrophic failure.
 
 GCM uses the IV to initialise a keystream (CTR mode). If two messages are encrypted with the same key and IV, their keystreams are identical. An attacker who observes both ciphertexts `C1 = P1 ⊕ K` and `C2 = P2 ⊕ K` can compute `C1 ⊕ C2 = P1 ⊕ P2`. XOR-ing two plaintext streams is recoverable via known-plaintext or crib-dragging attacks — the attacker does not need the key.
 
@@ -255,7 +255,7 @@ IV reuse also breaks authentication. The GHASH key for GCM is derived from `AES(
 
 This is not hypothetical. The BEAST attack against TLS 1.0 and the nonce-reuse vulnerabilities in several real-world AES-GCM deployments exploited exactly this property.
 
-**What this project does instead:** `os.urandom(12)` is called inside `aes.encrypt()` on every invocation — the IV is never accepted as a parameter from the caller. The random IV is stored alongside the ciphertext so the recipient can decrypt, but the caller has no way to accidentally or deliberately reuse it. The test `test_different_ivs_per_call` asserts that two encryptions of the same plaintext produce different IVs.
+**What this project does instead:** `os.urandom(12)` is called inside `aes.encrypt()` on every invocation, the IV is never accepted as a parameter from the caller. The random IV is stored alongside the ciphertext so the recipient can decrypt, but the caller has no way to accidentally or deliberately reuse it. The test `test_different_ivs_per_call` asserts that two encryptions of the same plaintext produce different IVs.
 
 ---
 
@@ -263,11 +263,11 @@ This is not hypothetical. The BEAST attack against TLS 1.0 and the nonce-reuse v
 
 If signature verification is optional, deferred, or performed after decryption, an attacker gains a decryption oracle.
 
-AES-GCM is malleable at the ciphertext level in a specific way: an attacker who knows the plaintext value at offset N can flip exactly the bits they want at offset N by XOR-ing the corresponding ciphertext byte — and then adjust the authentication tag to match (if they have the GHASH key, which IV reuse above gives them). Without a signature check, the server will decrypt attacker-supplied ciphertexts and return the results.
+AES-GCM is malleable at the ciphertext level in a specific way: an attacker who knows the plaintext value at offset N can flip exactly the bits they want at offset N by XOR-ing the corresponding ciphertext byte, and then adjust the authentication tag to match (if they have the GHASH key, which IV reuse above gives them). Without a signature check, the server will decrypt attacker-supplied ciphertexts and return the results.
 
 More concretely: in a system where decryption errors are returned with different HTTP status codes or response timing than authentication errors, an attacker can mount a padding oracle or tag-forgery attack by observing which errors occur for which inputs. The attacker learns information about the key with each query.
 
-Beyond oracle attacks, skipping verification means the system provides no authenticity guarantee at all. Any party who can upload a file can replace its ciphertext with content of their choosing — the recipient has no way to know whether the file came from the claimed sender or was substituted in transit.
+Beyond oracle attacks, skipping verification means the system provides no authenticity guarantee at all. Any party who can upload a file can replace its ciphertext with content of their choosing, the recipient has no way to know whether the file came from the claimed sender or was substituted in transit.
 
 **What this project does instead:** In `app.py`'s download route, `signatures.verify_ciphertext()` is called first, before any key material is loaded or any decryption attempt is made. If it raises `InvalidSignature`, the request is aborted and the event is logged as `VERIFY_FAIL`. The decryption code is unreachable without a valid signature. The test `test_tampered_ciphertext_body_raises` verifies that a single-bit flip in the ciphertext fails the signature check.
 
@@ -275,7 +275,7 @@ Beyond oracle attacks, skipping verification means the system provides no authen
 
 ### 4. Hardcoding keys or deriving them from a constant
 
-Hardcoded keys are the most common cryptographic mistake in real codebases and the easiest to find — a `git log` search or a `grep` for hex strings often surfaces them immediately.
+Hardcoded keys are the most common cryptographic mistake in real codebases and the easiest to find, a `git log` search or a `grep` for hex strings often surfaces them immediately.
 
 The failure modes are layered. A key committed to a repository is in every clone, every fork, every CI log that prints environment variables, and every backup. Rotating it requires a code change and redeploy. Any file encrypted with it before the rotation can be decrypted by anyone who ever had a copy of the repository.
 
@@ -283,7 +283,7 @@ A subtler variant is deriving the key deterministically from a low-entropy sourc
 
 The same problem applies to using a constant salt in PBKDF2. Without a random per-derivation salt, two users with the same password get the same derived key. An attacker can precompute a rainbow table over the fixed salt and crack all passwords simultaneously rather than one at a time.
 
-**What this project does instead:** The AES session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous — all zeros is an obvious placeholder, not a functioning key — and the comment explicitly marks it as requiring an override.
+**What this project does instead:** The AES session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous, all zeros is an obvious placeholder, not a functioning key, and the comment explicitly marks it as requiring an override.
 
 ---
 
