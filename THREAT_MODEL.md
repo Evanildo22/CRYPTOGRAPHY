@@ -15,22 +15,22 @@ Secure File Share is a web application that encrypts files before storage, signs
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  CLIENT BROWSER (untrusted)                                      │
-│  • User pastes private keys into form fields                     │
-│  • Keys are transmitted over the network to the server           │
+│  CLIENT BROWSER (untrusted)                                     │
+│  • User pastes private keys into form fields                    │
+│  • Keys are transmitted over the network to the server          │
 └──────────────────────────────┬──────────────────────────────────┘
                                │  HTTPS (required; not enforced by app)
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  FLASK APPLICATION SERVER (semi-trusted)                         │
-│  • Receives and processes keys + file data in memory             │
-│  • Persists only ciphertext, wrapped keys, signatures, digests   │
-│  • Never stores private keys                                     │
+│  FLASK APPLICATION SERVER (semi-trusted)                        │
+│  • Receives and processes keys + file data in memory            │
+│  • Persists only ciphertext, wrapped keys, signatures, digests  │
+│  • Never stores private keys                                    │
 └──────────────────────────────┬──────────────────────────────────┘
                                │  Local filesystem
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  STORAGE (untrusted — assume attacker can read)                  │
-│  storage/files/*.enc   storage/keys/*.key   storage/sigs/*.sig   │
-│  storage/fingerprints/*.sha256   storage/audit/audit.log         │
+│  STORAGE (untrusted — assume attacker can read)                 │
+│  storage/files/*.enc   storage/keys/*.key   storage/sigs/*.sig  │
+│  storage/fingerprints/*.sha256   storage/audit/audit.log        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
