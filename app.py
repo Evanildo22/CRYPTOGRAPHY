@@ -193,8 +193,11 @@ def upload():
             STORAGE_KEYS.joinpath(f"{file_id}.ecpub").write_bytes(ephem_pub_pem)
             meta = {"mode": "ECDH", "salt": salt.hex(), "filename": file.filename}
 
-    except Exception as exc:
-        flash(f"Cryptographic error during upload: {exc}", "error")
+    except ValueError:
+        flash("Invalid key format — paste the complete PEM block including the -----BEGIN----- and -----END----- lines.", "error")
+        return redirect(url_for("index"))
+    except Exception:
+        flash("Encryption failed — check that the key matches the selected mode.", "error")
         return redirect(url_for("index"))
 
     # Persist artefacts
@@ -249,8 +252,14 @@ def download_page(file_id: str):
         signatures.verify_ciphertext(ciphertext, sig, verifier_pub)
     except InvalidSignature:
         append_entry("VERIFY_FAIL", file_id, meta["mode"], _client_ip())
-        flash("Signature verification FAILED. File may have been tampered with.", "error")
+        flash("Signature verification failed — the file may have been tampered with, or the wrong public key was provided.", "error")
         return render_template("verify.html", file_id=file_id, ok=False)
+    except ValueError:
+        flash("Invalid public key format — paste the complete PEM block including the -----BEGIN----- and -----END----- lines.", "error")
+        return redirect(url_for("download_page", file_id=file_id))
+    except Exception:
+        flash("Signature check failed — check that you've pasted the sender's RSA public key.", "error")
+        return redirect(url_for("download_page", file_id=file_id))
 
     append_entry("VERIFY_OK", file_id, meta["mode"], _client_ip())
 
@@ -276,8 +285,14 @@ def download_page(file_id: str):
 
         plaintext = aes.decrypt(ciphertext, session_key)
 
-    except (InvalidTag, ValueError, Exception) as exc:
-        flash(f"Decryption failed: {exc}", "error")
+    except InvalidTag:
+        flash("Wrong key or password — the file could not be decrypted. Check you're using the correct private key.", "error")
+        return redirect(url_for("download_page", file_id=file_id))
+    except ValueError:
+        flash("Invalid key format — paste the complete PEM block including the -----BEGIN----- and -----END----- lines.", "error")
+        return redirect(url_for("download_page", file_id=file_id))
+    except Exception:
+        flash("Decryption failed — check that you're using the correct key type for this file's encryption mode.", "error")
         return redirect(url_for("download_page", file_id=file_id))
 
     fp_ok      = fingerprint.verify(plaintext, stored_fp)

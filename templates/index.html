@@ -11,11 +11,11 @@
   <div class="concept-grid">
     <div class="concept-card">
       <h3>Mode A — RSA Key Transport</h3>
-      <p>A random AES-256 session key is wrapped with the recipient's RSA-2048 public key (OAEP). Only the matching private key can decrypt the file.</p>
+      <p>A random AES-256 session key is wrapped with the recipient's RSA-2048 public key (OAEP). Only the recipient's private key can unwrap the session key.</p>
     </div>
     <div class="concept-card">
       <h3>Mode B — ECDH + PFS</h3>
-      <p>An ephemeral P-256 keypair is generated, ECDH + HKDF derive the AES key, and the ephemeral private key is immediately destroyed. Compromise of the long-term key cannot expose past sessions.</p>
+      <p>An ephemeral P-256 keypair is generated, ECDH + HKDF derive the AES key, and the ephemeral private key is immediately destroyed. Past sessions stay safe even if your private key is later stolen.</p>
     </div>
     <div class="concept-card">
       <h3>Signatures</h3>
@@ -35,7 +35,10 @@
     <label for="file">File</label>
     <input id="file" name="file" type="file" required />
 
-    <label for="password">Password (used to derive KEK via PBKDF2)</label>
+    <label for="password">
+      Password — used to derive your encryption key
+      <span class="tooltip" title="Your password is never stored. It is run through PBKDF2-HMAC-SHA256 (600,000 iterations) to produce a key-encryption key (KEK) that wraps your session key.">ⓘ</span>
+    </label>
     <input id="password" name="password" type="password" required autocomplete="new-password" />
 
     <fieldset>
@@ -50,18 +53,24 @@
 
     <div id="mode-a-keys">
       <label for="rsa_public_key">Recipient RSA Public Key (PEM)</label>
-      <textarea id="rsa_public_key" name="rsa_public_key" rows="8" placeholder="BEGIN PUBLIC KEY"></textarea>
+      <textarea id="rsa_public_key" name="rsa_public_key" rows="8" placeholder="-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A…
+-----END PUBLIC KEY-----"></textarea>
     </div>
 
     <div id="mode-b-keys" style="display:none;">
       <label for="ec_public_key">Recipient EC Public Key (PEM)</label>
-      <textarea id="ec_public_key" name="ec_public_key" rows="8" placeholder="BEGIN PUBLIC KEY"></textarea>
+      <textarea id="ec_public_key" name="ec_public_key" rows="8" placeholder="-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD…
+-----END PUBLIC KEY-----"></textarea>
     </div>
 
-    <label for="rsa_private_key">Signer RSA Private Key (PEM) — for digital signature</label>
-    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" placeholder="BEGIN PRIVATE KEY"></textarea>
+    <label for="rsa_private_key">Your RSA Private Key (PEM) — for signing</label>
+    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" placeholder="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASC…
+-----END PRIVATE KEY-----"></textarea>
 
-    <button type="submit">Encrypt &amp; Upload</button>
+    <button type="submit">Encrypt &amp; upload</button>
   </form>
 </section>
 

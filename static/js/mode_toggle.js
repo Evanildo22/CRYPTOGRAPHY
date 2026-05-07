@@ -1,20 +1,19 @@
 (function () {
   "use strict";
 
-  const btns      = document.querySelectorAll(".mode-btn[data-mode]");
-  const modeInput = document.getElementById("mode-value");
-  const secA      = document.getElementById("mode-a-keys");
-  const secB      = document.getElementById("mode-b-keys");
+  const modeA = document.querySelector('input[name="mode"][value="A"]');
+  const modeB = document.querySelector('input[name="mode"][value="B"]');
+  const secA  = document.getElementById("mode-a-keys");
+  const secB  = document.getElementById("mode-b-keys");
 
-  if (!btns.length || !modeInput || !secA || !secB) return;
+  if (!modeA || !modeB || !secA || !secB) return;
 
-  function applyMode(mode) {
-    btns.forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
-    modeInput.value    = mode;
-    secA.style.display = mode === "A" ? "" : "none";
-    secB.style.display = mode === "B" ? "" : "none";
+  function applyMode() {
+    secA.style.display = modeA.checked ? "" : "none";
+    secB.style.display = modeA.checked ? "none" : "";
   }
 
-  btns.forEach(btn => btn.addEventListener("click", () => applyMode(btn.dataset.mode)));
-  applyMode("A");
+  modeA.addEventListener("change", applyMode);
+  modeB.addEventListener("change", applyMode);
+  applyMode();
 })();

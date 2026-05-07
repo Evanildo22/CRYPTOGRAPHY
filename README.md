@@ -6,7 +6,7 @@
 ![Tests](https://img.shields.io/badge/tests-83%20unit%20%2B%206%20benchmarks-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-A web application that demonstrates end-to-end applied cryptography: files are encrypted before storage, every ciphertext is signed to prove uploader identity, and every security event is written to a tamper-evident audit log. The system offers two encryption modes, RSA key transport and ECDH with perfect forward secrecy, so the same upload pipeline illustrates both how traditional PKI works and how ephemeral key agreement (the mechanism behind TLS 1.3 and Signal) provides a stronger forward-secrecy guarantee. Nothing in this project is theoretical: every primitive is wired into a running Flask application with 83 unit tests that verify tamper detection, round-trip correctness, and the no-disk-write guarantee for ephemeral keys.
+A web application that demonstrates end-to-end applied cryptography: files are encrypted before storage, every ciphertext is signed to prove uploader identity, and every security event is written to a tamper-evident audit log. The system offers two encryption modes, RSA key transport and ECDH with perfect forward secrecy — so the same upload pipeline illustrates both how traditional PKI works and how ephemeral key agreement (the mechanism behind TLS 1.3 and Signal) provides a stronger forward-secrecy guarantee. Nothing in this project is theoretical: every primitive is wired into a running Flask application with 83 unit tests that verify tamper detection, round-trip correctness, and the no-disk-write guarantee for ephemeral keys.
 
 > **Threat model:** [`THREAT_MODEL.md`](THREAT_MODEL.md) covers assets, seven adversary profiles, attack trees for each threat, mitigations with residual risks, and an explicit list of what this system does *not* protect against.
 
@@ -241,7 +241,7 @@ In a file-sharing context, an attacker who intercepts two ciphertext files can d
 
 ECB also provides no authentication. An attacker can rearrange, delete, or splice ciphertext blocks and the recipient has no way to detect the modification.
 
-**What this project does instead:** AES-256-GCM. The authentication tag is computed over the entire ciphertext using a polynomial MAC (GHASH). Any modification to any byte — including reordering blocks — produces a tag mismatch. Decryption raises `InvalidTag` before returning a single plaintext byte. The mode also chains block outputs through a counter, so identical plaintext blocks encrypt to different ciphertext blocks.
+**What this project does instead:** AES-256-GCM. The authentication tag is computed over the entire ciphertext using a polynomial MAC (GHASH). Any modification to any byte, including reordering blocks — produces a tag mismatch. Decryption raises `InvalidTag` before returning a single plaintext byte. The mode also chains block outputs through a counter, so identical plaintext blocks encrypt to different ciphertext blocks.
 
 ---
 
@@ -251,7 +251,7 @@ AES-GCM's security guarantee collapses completely when an IV is reused with the 
 
 GCM uses the IV to initialise a keystream (CTR mode). If two messages are encrypted with the same key and IV, their keystreams are identical. An attacker who observes both ciphertexts `C1 = P1 ⊕ K` and `C2 = P2 ⊕ K` can compute `C1 ⊕ C2 = P1 ⊕ P2`. XOR-ing two plaintext streams is recoverable via known-plaintext or crib-dragging attacks — the attacker does not need the key.
 
-IV reuse also breaks authentication. The GHASH key for GCM is derived from `AES(key, IV)`. If the same IV is reused, the attacker can recover the GHASH key by solving a polynomial equation over GF(2^128) from two observed (ciphertext, tag) pairs. Once they have the GHASH key they can forge authentication tags for arbitrary messages under that key-IV pair — completely defeating the integrity guarantee.
+IV reuse also breaks authentication. The GHASH key for GCM is derived from `AES(key, IV)`. If the same IV is reused, the attacker can recover the GHASH key by solving a polynomial equation over GF(2^128) from two observed (ciphertext, tag) pairs. Once they have the GHASH key they can forge authentication tags for arbitrary messages under that key-IV pair, completely defeating the integrity guarantee.
 
 This is not hypothetical. The BEAST attack against TLS 1.0 and the nonce-reuse vulnerabilities in several real-world AES-GCM deployments exploited exactly this property.
 
@@ -283,7 +283,7 @@ A subtler variant is deriving the key deterministically from a low-entropy sourc
 
 The same problem applies to using a constant salt in PBKDF2. Without a random per-derivation salt, two users with the same password get the same derived key. An attacker can precompute a rainbow table over the fixed salt and crack all passwords simultaneously rather than one at a time.
 
-**What this project does instead:** The AES session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous, all zeros is an obvious placeholder, not a functioning key, and the comment explicitly marks it as requiring an override.
+**What this project does instead:** The AES session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous — all zeros is an obvious placeholder, not a functioning key — and the comment explicitly marks it as requiring an override.
 
 ---
 

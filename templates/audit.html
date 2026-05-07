@@ -6,18 +6,18 @@
 <p>All uploads and downloads are recorded and cryptographically sealed. Entries marked <span class="tampered">TAMPERED</span> have a non-matching integrity check — the record may have been altered after the fact.</p>
 
 {% if not entries %}
-  <p>No activity recorded yet.</p>
+  <p>No events yet. Uploads and downloads will appear here once you start using SecureShare.</p>
 {% else %}
 <div class="table-wrapper">
   <table class="audit-table">
     <thead>
       <tr>
-        <th>Time</th>
-        <th>Event</th>
-        <th>File</th>
-        <th>Mode</th>
-        <th>IP</th>
-        <th>Integrity</th>
+        <th title="When the event occurred (UTC)">Time</th>
+        <th title="What happened — UPLOAD, DOWNLOAD, VERIFY_OK, VERIFY_FAIL, KEYGEN">Event</th>
+        <th title="First 8 characters of the file's unique ID">File ID</th>
+        <th title="Encryption mode used — RSA (Mode A) or ECDH (Mode B)">Mode</th>
+        <th title="IP address of the client that triggered the event">Client IP</th>
+        <th title="Whether this log entry's HMAC matches — TAMPERED means the record was altered after it was written">Integrity</th>
       </tr>
     </thead>
     <tbody>
@@ -32,7 +32,7 @@
           {% if entry.hmac_ok %}
             <span class="ok">OK</span>
           {% else %}
-            <span class="tampered">TAMPERED</span>
+            <span class="tampered" title="This entry's HMAC does not match — the record was likely modified or deleted after it was written. Do not trust this event.">TAMPERED</span>
           {% endif %}
         </td>
       </tr>
@@ -40,6 +40,14 @@
     </tbody>
   </table>
 </div>
-<p>{{ entries | length }} total entries.</p>
+<p>{{ entries | length }} event{{ 's' if entries | length != 1 else '' }} recorded. All entries are verified on load — any with a broken integrity check are flagged above.</p>
+
+{% set tampered = entries | rejectattr('hmac_ok') | list %}
+{% if tampered %}
+<div class="alert alert-error" style="margin-top: 1rem;">
+  <strong>{{ tampered | length }} tampered {{ 'entry' if tampered | length == 1 else 'entries' }} detected.</strong>
+  {{ 'This record does' if tampered | length == 1 else 'These records do' }} not match {{ 'its' if tampered | length == 1 else 'their' }} stored HMAC signature — {{ 'it was' if tampered | length == 1 else 'they were' }} likely modified or deleted after being written. Do not rely on the integrity of {{ 'this event' if tampered | length == 1 else 'these events' }}.
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}

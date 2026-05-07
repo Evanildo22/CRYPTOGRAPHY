@@ -8,34 +8,136 @@
 <form method="POST">
   <fieldset>
     <legend>Key type</legend>
-    <label><input type="radio" name="key_type" value="both" checked /> RSA + EC — both modes</label>
-    <label><input type="radio" name="key_type" value="rsa" /> RSA only — Mode A</label>
-    <label><input type="radio" name="key_type" value="ec"  /> EC only — Mode B</label>
+    <label>
+      <input type="radio" name="key_type" value="both" checked />
+      <span class="radio-content">
+        <span class="radio-label">RSA + EC — works with both encryption modes</span>
+        <span class="radio-desc">Recommended if you're unsure. Generates everything needed for Mode A and Mode B.</span>
+      </span>
+    </label>
+    <label>
+      <input type="radio" name="key_type" value="rsa" />
+      <span class="radio-content">
+        <span class="radio-label">RSA only — key transport encryption (Mode A)</span>
+        <span class="radio-desc">Use if you'll only share files using Mode A. Smaller key set, no EC key generated.</span>
+      </span>
+    </label>
+    <label>
+      <input type="radio" name="key_type" value="ec" />
+      <span class="radio-content">
+        <span class="radio-label">EC only — perfect forward secrecy (Mode B)</span>
+        <span class="radio-desc">Use if you'll only share files using Mode B. Past sessions stay safe even if this key is later stolen.</span>
+      </span>
+    </label>
   </fieldset>
-  <button type="submit">Generate</button>
+  <button type="submit">Generate keypair</button>
 </form>
+
+{% if rsa_priv or ec_priv %}
+<div class="alert alert-warning" style="margin-top: 1.5rem;">
+  <strong>Copy your private keys now.</strong> This page will not show them again — they are never stored on the server. Once you navigate away, they are gone.
+</div>
 
 {% if rsa_priv %}
 <section class="key-display">
-  <h3>RSA-2048 Private Key</h3>
-  <p class="warn">Keep this secret. Used for signing and Mode A decryption.</p>
-  <textarea readonly rows="20">{{ rsa_priv }}</textarea>
+  <div class="key-block">
+    <div class="key-block-header">
+      <div>
+        <h3>RSA-2048 Private Key</h3>
+        <p class="warn">Keep this secret. Used for signing and Mode A decryption.</p>
+      </div>
+      <div class="key-actions">
+        <button type="button" class="key-btn" data-copy="key-rsa-priv">Copy</button>
+        <button type="button" class="key-btn" data-download="key-rsa-priv" data-filename="rsa_private_key.pem">Download</button>
+      </div>
+    </div>
+    <textarea id="key-rsa-priv" readonly rows="20">{{ rsa_priv }}</textarea>
+  </div>
 
-  <h3>RSA-2048 Public Key</h3>
-  <p>Share this freely. Used for signature verification and Mode A encryption.</p>
-  <textarea readonly rows="9">{{ rsa_pub }}</textarea>
+  <div class="key-block">
+    <div class="key-block-header">
+      <div>
+        <h3>RSA-2048 Public Key</h3>
+        <p>Share this freely. Used for signature verification and Mode A encryption.</p>
+      </div>
+      <div class="key-actions">
+        <button type="button" class="key-btn" data-copy="key-rsa-pub">Copy</button>
+        <button type="button" class="key-btn" data-download="key-rsa-pub" data-filename="rsa_public_key.pem">Download</button>
+      </div>
+    </div>
+    <textarea id="key-rsa-pub" readonly rows="9">{{ rsa_pub }}</textarea>
+  </div>
 </section>
 {% endif %}
 
 {% if ec_priv %}
 <section class="key-display">
-  <h3>P-256 EC Private Key</h3>
-  <p class="warn">Keep this secret. Used for Mode B decryption.</p>
-  <textarea readonly rows="8">{{ ec_priv }}</textarea>
+  <div class="key-block">
+    <div class="key-block-header">
+      <div>
+        <h3>P-256 EC Private Key</h3>
+        <p class="warn">Keep this secret. Used for Mode B decryption.</p>
+      </div>
+      <div class="key-actions">
+        <button type="button" class="key-btn" data-copy="key-ec-priv">Copy</button>
+        <button type="button" class="key-btn" data-download="key-ec-priv" data-filename="ec_private_key.pem">Download</button>
+      </div>
+    </div>
+    <textarea id="key-ec-priv" readonly rows="8">{{ ec_priv }}</textarea>
+  </div>
 
-  <h3>P-256 EC Public Key</h3>
-  <p>Share this freely. Senders use it to encrypt files for you.</p>
-  <textarea readonly rows="6">{{ ec_pub }}</textarea>
+  <div class="key-block">
+    <div class="key-block-header">
+      <div>
+        <h3>P-256 EC Public Key</h3>
+        <p>Share this freely. Senders use it to encrypt files for you.</p>
+      </div>
+      <div class="key-actions">
+        <button type="button" class="key-btn" data-copy="key-ec-pub">Copy</button>
+        <button type="button" class="key-btn" data-download="key-ec-pub" data-filename="ec_public_key.pem">Download</button>
+      </div>
+    </div>
+    <textarea id="key-ec-pub" readonly rows="6">{{ ec_pub }}</textarea>
+  </div>
 </section>
+{% endif %}
+
+<script>
+(function () {
+  "use strict";
+
+  document.querySelectorAll("[data-copy]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var ta = document.getElementById(this.dataset.copy);
+      if (!ta) return;
+      var self = this;
+      navigator.clipboard.writeText(ta.value).then(function () {
+        self.textContent = "Copied!";
+        self.style.color = "var(--green)";
+        self.style.borderColor = "var(--green)";
+        setTimeout(function () {
+          self.textContent = "Copy";
+          self.style.color = "";
+          self.style.borderColor = "";
+        }, 1800);
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-download]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var ta = document.getElementById(this.dataset.download);
+      if (!ta) return;
+      var blob = new Blob([ta.value], { type: "application/x-pem-file" });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement("a");
+      a.href     = url;
+      a.download = this.dataset.filename || "key.pem";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -14,21 +14,29 @@
   <p class="hint">Verify the file after downloading: <code>sha256sum &lt;filename&gt;</code></p>
 </div>
 
+<p>Two steps happen in sequence: the sender's signature is verified first — confirming the file hasn't been altered in transit — then your private key is used to decrypt it. Both must succeed before the file is released.</p>
+
 <form method="POST">
   <div class="form-field">
     <label for="rsa_public_key">Sender's public key <span class="label-hint">— RSA (PEM), for signature verification</span></label>
-    <textarea id="rsa_public_key" name="rsa_public_key" rows="8" required placeholder="BEGIN PUBLIC KEY"></textarea>
+    <textarea id="rsa_public_key" name="rsa_public_key" rows="8" required placeholder="-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A…
+-----END PUBLIC KEY-----"></textarea>
   </div>
 
   {% if mode == "RSA" %}
   <div class="form-field">
     <label for="rsa_private_key">Your private key <span class="label-hint">— RSA (PEM), for decryption</span></label>
-    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" required placeholder="BEGIN PRIVATE KEY"></textarea>
+    <textarea id="rsa_private_key" name="rsa_private_key" rows="8" required placeholder="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASC…
+-----END PRIVATE KEY-----"></textarea>
   </div>
   {% else %}
   <div class="form-field">
     <label for="ec_private_key">Your private key <span class="label-hint">— EC (PEM), for decryption</span></label>
-    <textarea id="ec_private_key" name="ec_private_key" rows="8" required placeholder="BEGIN PRIVATE KEY"></textarea>
+    <textarea id="ec_private_key" name="ec_private_key" rows="8" required placeholder="-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49…
+-----END PRIVATE KEY-----"></textarea>
   </div>
   {% endif %}
 
