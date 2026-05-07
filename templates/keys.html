@@ -6,7 +6,7 @@
 <p>Create RSA-2048 and P-256 EC keypairs. <strong>Your private keys are never stored — copy them before leaving this page.</strong></p>
 
 <form method="POST">
-  <fieldset>
+  <fieldset {% if rsa_priv or ec_priv %}disabled{% endif %}>
     <legend>Key type</legend>
     <label>
       <input type="radio" name="key_type" value="both" checked />
@@ -30,7 +30,11 @@
       </span>
     </label>
   </fieldset>
+  {% if rsa_priv or ec_priv %}
+  <p class="hint">To generate a different key type, <a href="{{ url_for('keys') }}">refresh this page</a>.</p>
+  {% else %}
   <button type="submit">Generate keypair</button>
+  {% endif %}
 </form>
 
 {% if rsa_priv or ec_priv %}
@@ -40,6 +44,7 @@
 
 {% if rsa_priv %}
 <section class="key-display">
+  <h2>RSA-2048 keypair — Mode A</h2>
   <div class="key-block">
     <div class="key-block-header">
       <div>
@@ -73,6 +78,7 @@
 
 {% if ec_priv %}
 <section class="key-display">
+  <h2>P-256 EC keypair — Mode B</h2>
   <div class="key-block">
     <div class="key-block-header">
       <div>
