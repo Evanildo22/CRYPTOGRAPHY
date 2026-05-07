@@ -373,7 +373,7 @@ button[type="submit"]:hover, button.btn:hover { opacity: 0.85; }
 .key-display textarea { font-size: 0.75rem; }
 .warn                 { color: var(--yellow) !important; font-size: 0.82rem; }
 
-.key-block { margin-bottom: 1.75rem; }
+.key-block { margin-bottom: 3rem; }
 
 .key-block-header {
   display: flex;
@@ -408,6 +408,17 @@ button[type="submit"]:hover, button.btn:hover { opacity: 0.85; }
 }
 
 .key-btn:hover { color: var(--text); border-color: var(--muted); }
+
+.key-private-warning {
+  background: rgba(210, 153, 34, 0.08);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--yellow);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.4rem 0.75rem;
+}
 
 /* ---------- Audit table ---------- */
 .table-wrapper { overflow-x: auto; }
