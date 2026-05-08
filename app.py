@@ -77,6 +77,10 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 for _dir in (STORAGE_FILES, STORAGE_KEYS, STORAGE_SIGS, STORAGE_FPS):
     _dir.mkdir(parents=True, exist_ok=True)
 
+# Temporary store for decrypted files: token → (plaintext_bytes, filename)
+# Entries are consumed on first fetch and never written to disk.
+_pending_downloads: dict = {}
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -307,12 +311,21 @@ def download_page(file_id: str):
 
     append_entry("DOWNLOAD", file_id, meta["mode"], _client_ip())
 
+    token = uuid.uuid4().hex
+    _pending_downloads[token] = (plaintext, meta.get("filename", "decrypted_file"))
+    flash("Signature verified and file decrypted successfully. Your download has started.", "success")
+    return redirect(url_for("download_page", file_id=file_id, dl=token))
+
+
+@app.route("/fetch/<token>")
+def fetch_decrypted(token: str):
     import io
-    return send_file(
-        io.BytesIO(plaintext),
-        download_name=meta.get("filename", "decrypted_file"),
-        as_attachment=True,
-    )
+    entry = _pending_downloads.pop(token, None)
+    if entry is None:
+        flash("Download link expired or already used.", "error")
+        return redirect(url_for("index"))
+    plaintext, filename = entry
+    return send_file(io.BytesIO(plaintext), download_name=filename, as_attachment=True)
 
 
 @app.route("/verify/<file_id>")
