@@ -35,6 +35,7 @@ EventType = Literal[
     "DOWNLOAD",
     "VERIFY_OK",
     "VERIFY_FAIL",
+    "DECRYPT_FAIL",
     "KEYGEN",
     "FINGERPRINT_MISMATCH",
 ]

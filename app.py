@@ -259,9 +259,11 @@ def download_page(file_id: str):
         flash("Signature verification failed — the file may have been tampered with, or the wrong public key was provided.", "error")
         return render_template("verify.html", file_id=file_id, ok=False)
     except ValueError:
+        append_entry("VERIFY_FAIL", file_id, meta["mode"], _client_ip())
         flash("Invalid public key format — paste the complete PEM block including the -----BEGIN----- and -----END----- lines.", "error")
         return redirect(url_for("download_page", file_id=file_id))
     except Exception:
+        append_entry("VERIFY_FAIL", file_id, meta["mode"], _client_ip())
         flash("Signature check failed — check that you've pasted the sender's RSA public key.", "error")
         return redirect(url_for("download_page", file_id=file_id))
 
@@ -290,12 +292,15 @@ def download_page(file_id: str):
         plaintext = aes.decrypt(ciphertext, session_key)
 
     except InvalidTag:
+        append_entry("DECRYPT_FAIL", file_id, meta["mode"], _client_ip())
         flash("Wrong key or password — the file could not be decrypted. Check you're using the correct private key.", "error")
         return redirect(url_for("download_page", file_id=file_id))
     except ValueError:
+        append_entry("DECRYPT_FAIL", file_id, meta["mode"], _client_ip())
         flash("Invalid key format — paste the complete PEM block including the -----BEGIN----- and -----END----- lines.", "error")
         return redirect(url_for("download_page", file_id=file_id))
     except Exception:
+        append_entry("DECRYPT_FAIL", file_id, meta["mode"], _client_ip())
         flash("Decryption failed — check that you're using the correct key type for this file's encryption mode.", "error")
         return redirect(url_for("download_page", file_id=file_id))
 

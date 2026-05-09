@@ -13,7 +13,7 @@
     <thead>
       <tr>
         <th title="When the event occurred (UTC)">Time</th>
-        <th title="What happened — UPLOAD, DOWNLOAD, VERIFY_OK, VERIFY_FAIL, KEYGEN">Event</th>
+        <th title="What happened — UPLOAD, DOWNLOAD, VERIFY_OK, VERIFY_FAIL, DECRYPT_FAIL, KEYGEN">Event</th>
         <th title="First 8 characters of the file's unique ID">File ID</th>
         <th title="Encryption mode used — RSA (Mode A) or ECDH (Mode B)">Mode</th>
         <th title="IP address of the client that triggered the event">Client IP</th>
@@ -24,7 +24,7 @@
       {% for entry in entries %}
       <tr class="{{ 'tampered' if not entry.hmac_ok else '' }}">
         <td>{{ entry.get('timestamp', '—') }}</td>
-        <td><code>{{ entry.get('event_type', '—') }}</code></td>
+        <td><code class="{{ 'tampered' if '_FAIL' in entry.get('event_type', '') else '' }}">{{ entry.get('event_type', '—') }}</code></td>
         <td><code>{{ entry.get('file_id', '—')[:8] }}…</code></td>
         <td>{{ entry.get('mode', '—') }}</td>
         <td>{{ entry.get('ip_address', '—') }}</td>
