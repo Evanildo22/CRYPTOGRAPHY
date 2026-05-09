@@ -25,7 +25,7 @@
       <tr class="{{ 'tampered' if not entry.hmac_ok else '' }}">
         <td data-utc="{{ entry.get('timestamp', '') }}">{{ entry.get('timestamp', '—') | fmt_ts }}</td>
         <td><code class="{{ 'tampered' if '_FAIL' in entry.get('event_type', '') else '' }}">{{ entry.get('event_type', '—') }}</code></td>
-        <td><code>{{ entry.get('file_id', '—')[:8] }}…</code></td>
+        <td><code title="{{ entry.get('file_id', '') }}" style="cursor:help;">{{ entry.get('file_id', '—')[:8] }}…</code></td>
         <td>{{ entry.get('mode', '—') }}</td>
         <td>{{ entry.get('ip_address', '—') }}</td>
         <td>
