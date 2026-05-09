@@ -12,7 +12,7 @@
   <table class="audit-table">
     <thead>
       <tr>
-        <th title="When the event occurred (UTC)">Time</th>
+        <th title="When the event occurred (your local time)">Time</th>
         <th title="What happened — UPLOAD, DOWNLOAD, VERIFY_OK, VERIFY_FAIL, DECRYPT_FAIL, KEYGEN">Event</th>
         <th title="First 8 characters of the file's unique ID">File ID</th>
         <th title="Encryption mode used — RSA (Mode A) or ECDH (Mode B)">Mode</th>
@@ -23,7 +23,7 @@
     <tbody>
       {% for entry in entries %}
       <tr class="{{ 'tampered' if not entry.hmac_ok else '' }}">
-        <td>{{ entry.get('timestamp', '—') }}</td>
+        <td data-utc="{{ entry.get('timestamp', '') }}">{{ entry.get('timestamp', '—') | fmt_ts }}</td>
         <td><code class="{{ 'tampered' if '_FAIL' in entry.get('event_type', '') else '' }}">{{ entry.get('event_type', '—') }}</code></td>
         <td><code>{{ entry.get('file_id', '—')[:8] }}…</code></td>
         <td>{{ entry.get('mode', '—') }}</td>
@@ -50,4 +50,23 @@
 </div>
 {% endif %}
 {% endif %}
+
+<script>
+(function () {
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  document.querySelectorAll("td[data-utc]").forEach(function (td) {
+    var iso = td.dataset.utc;
+    if (!iso) return;
+    var d = new Date(iso);
+    if (isNaN(d)) return;
+    td.textContent =
+      d.getFullYear() + "-" +
+      pad(d.getMonth() + 1) + "-" +
+      pad(d.getDate()) + " " +
+      pad(d.getHours()) + ":" +
+      pad(d.getMinutes()) + ":" +
+      pad(d.getSeconds());
+  });
+})();
+</script>
 {% endblock %}

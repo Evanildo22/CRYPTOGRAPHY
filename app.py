@@ -83,6 +83,19 @@ _pending_downloads: dict = {}
 
 
 # ---------------------------------------------------------------------------
+# Template filters
+# ---------------------------------------------------------------------------
+
+@app.template_filter("fmt_ts")
+def _fmt_ts(ts: str) -> str:
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(ts).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (ValueError, TypeError):
+        return ts
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
