@@ -17,7 +17,7 @@
         <th title="First 8 characters of the file's unique ID">File ID</th>
         <th title="Encryption mode used — RSA (Mode A) or ECDH (Mode B)">Mode</th>
         <th title="IP address of the client that triggered the event">Client IP</th>
-        <th title="Whether this log entry's HMAC matches — TAMPERED means the record was altered after it was written">Integrity</th>
+        <th title="HMAC integrity of this entry, and whether it is correctly linked to the previous entry (chain). A CHAIN BREAK means one or more entries were deleted.">Integrity</th>
       </tr>
     </thead>
     <tbody>
@@ -29,10 +29,15 @@
         <td>{{ entry.get('mode', '—') }}</td>
         <td>{{ entry.get('ip_address', '—') }}</td>
         <td>
-          {% if entry.hmac_ok %}
+          {% if entry.hmac_ok and entry.chain_ok %}
             <span class="ok">OK</span>
           {% else %}
-            <span class="tampered" title="This entry's HMAC does not match — the record was likely modified or deleted after it was written. Do not trust this event.">TAMPERED</span>
+            {% if not entry.chain_ok %}
+              <span class="tampered" title="This entry's prev_hash does not match the hash of the preceding entry — one or more log entries were deleted before this one.">CHAIN BREAK</span>
+            {% endif %}
+            {% if not entry.hmac_ok %}
+              <span class="tampered" title="This entry's HMAC does not match — the record was modified after it was written.">TAMPERED</span>
+            {% endif %}
           {% endif %}
         </td>
       </tr>
@@ -46,7 +51,15 @@
 {% if tampered %}
 <div class="alert alert-error" style="margin-top: 1rem;">
   <strong>{{ tampered | length }} tampered {{ 'entry' if tampered | length == 1 else 'entries' }} detected.</strong>
-  {{ 'This record does' if tampered | length == 1 else 'These records do' }} not match {{ 'its' if tampered | length == 1 else 'their' }} stored HMAC signature — {{ 'it was' if tampered | length == 1 else 'they were' }} likely modified or deleted after being written. Do not rely on the integrity of {{ 'this event' if tampered | length == 1 else 'these events' }}.
+  {{ 'This record does' if tampered | length == 1 else 'These records do' }} not match {{ 'its' if tampered | length == 1 else 'their' }} stored HMAC signature — {{ 'it was' if tampered | length == 1 else 'they were' }} likely modified after being written.
+</div>
+{% endif %}
+
+{% set broken_chain = entries | rejectattr('chain_ok') | list %}
+{% if broken_chain %}
+<div class="alert alert-error" style="margin-top: 1rem;">
+  <strong>{{ broken_chain | length }} chain break{{ 's' if broken_chain | length != 1 else '' }} detected.</strong>
+  {{ 'An entry was' if broken_chain | length == 1 else 'Entries were' }} deleted from the log — the hash chain does not match at {{ broken_chain | length }} {{ 'point' if broken_chain | length == 1 else 'points' }}. The log cannot be trusted as a complete record of activity.
 </div>
 {% endif %}
 {% endif %}

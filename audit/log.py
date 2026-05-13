@@ -12,8 +12,14 @@ Design decisions
 * The HMAC covers the serialised JSON of the entry *without* the hmac field
   itself.  The canonical form is sorted-key JSON to ensure deterministic
   serialisation across Python versions and platforms.
-* The audit viewer re-verifies every HMAC before rendering.  Any entry whose
-  HMAC does not match is flagged as TAMPERED in the UI.
+* Each entry includes a ``prev_hash`` field — the SHA-256 hash of the
+  previous entry's canonical content.  This forms a hash chain: deleting
+  any entry breaks the chain for every subsequent entry, making deletions
+  detectable without the server secret.  The first entry uses a fixed
+  genesis sentinel as its ``prev_hash``.
+* The audit viewer re-verifies every HMAC and the full hash chain before
+  rendering.  Any entry whose HMAC does not match is flagged as TAMPERED;
+  any gap in the chain is flagged as CHAIN BREAK.
 * The log key is loaded from an environment variable (AUDIT_LOG_KEY) and
   must be a 32-byte hex string.  Using an environment variable ensures it
   is never committed to version control.
@@ -42,20 +48,44 @@ EventType = Literal[
 
 LOG_FILE: Path = STORAGE_AUDIT / "audit.log"
 
+# Sentinel prev_hash value used by the first entry in the log.
+_GENESIS = "0" * 64
+
 
 def _compute_hmac(entry_without_hmac: dict) -> str:
-    """
-    Compute HMAC-SHA256 over the canonical JSON representation of
-    *entry_without_hmac*.
-
-    Canonical form: JSON with sorted keys, no extra whitespace.
-    """
+    """HMAC-SHA256 over the canonical (sorted-key) JSON of the entry."""
     canonical = json.dumps(entry_without_hmac, sort_keys=True, separators=(",", ":"))
     return hmac.new(
         AUDIT_LOG_KEY,
         canonical.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+
+
+def _entry_hash(entry_without_hmac: dict) -> str:
+    """SHA-256 of the canonical entry content — used to build the hash chain."""
+    canonical = json.dumps(entry_without_hmac, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _last_entry_hash() -> str:
+    """Return the hash of the last entry in the log, or the genesis sentinel."""
+    if not LOG_FILE.exists():
+        return _GENESIS
+    last_line = None
+    with LOG_FILE.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                last_line = line
+    if last_line is None:
+        return _GENESIS
+    try:
+        entry = json.loads(last_line)
+        entry.pop("hmac", None)
+        return _entry_hash(entry)
+    except (json.JSONDecodeError, Exception):
+        return _GENESIS
 
 
 def append_entry(
@@ -66,7 +96,7 @@ def append_entry(
     extra: dict | None = None,
 ) -> None:
     """
-    Append a signed entry to the audit log.
+    Append a signed, chained entry to the audit log.
 
     Parameters
     ----------
@@ -94,6 +124,7 @@ def append_entry(
         "file_id":    file_id,
         "mode":       mode,
         "ip_address": ip_address,
+        "prev_hash":  _last_entry_hash(),
     }
     if extra:
         entry.update(extra)
@@ -111,19 +142,22 @@ def append_entry(
 
 def read_and_verify() -> list[dict]:
     """
-    Read all log entries and re-verify each HMAC.
+    Read all log entries, re-verify each HMAC, and verify the hash chain.
 
     Returns
     -------
     list[dict]
-        Each dict is the parsed log entry with an additional key
-        ``"hmac_ok"`` (``True`` / ``False``) indicating whether the
-        stored HMAC matches the recomputed value.
+        Each dict is the parsed log entry with two additional keys:
+        ``"hmac_ok"``   — True if the entry's HMAC matches.
+        ``"chain_ok"``  — True if this entry's prev_hash matches the hash
+                          of the preceding entry (detects deletions).
     """
     if not LOG_FILE.exists():
         return []
 
     entries: list[dict] = []
+    expected_prev = _GENESIS
+
     with LOG_FILE.open("r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -132,15 +166,25 @@ def read_and_verify() -> list[dict]:
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError:
-                entries.append({"raw": line, "hmac_ok": False, "parse_error": True})
+                entries.append({"raw": line, "hmac_ok": False, "chain_ok": False, "parse_error": True})
                 continue
 
             stored_hmac = entry.pop("hmac", None)
+
+            # HMAC verification
             expected_hmac = _compute_hmac(entry)
-            entry["hmac"]    = stored_hmac
-            entry["hmac_ok"] = hmac.compare_digest(
-                stored_hmac or "", expected_hmac
-            )
+            hmac_ok = hmac.compare_digest(stored_hmac or "", expected_hmac)
+
+            # Chain verification — prev_hash must match hash of previous entry
+            actual_prev = entry.get("prev_hash", _GENESIS)
+            chain_ok = hmac.compare_digest(actual_prev, expected_prev)
+
+            # Compute this entry's hash for the next iteration
+            expected_prev = _entry_hash(entry)
+
+            entry["hmac"]     = stored_hmac
+            entry["hmac_ok"]  = hmac_ok
+            entry["chain_ok"] = chain_ok
             entries.append(entry)
 
     return entries

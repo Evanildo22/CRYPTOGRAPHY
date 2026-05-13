@@ -20,7 +20,7 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 | **Integrity** | GCM 128-bit auth tag — any ciphertext modification raises `InvalidTag` before plaintext is released |
 | **Authenticity** | RSA-PSS-SHA256 over ciphertext — verified before decryption; wrong key or tampered bytes abort the request |
 | **Forward Secrecy** | ECDH P-256 ephemeral keypair — private key destroyed after derivation; past sessions safe after long-term key compromise (Mode B) |
-| **Non-repudiation** | HMAC-SHA256 append-only audit log — every upload, download, and verification attempt is recorded with a tamper-evident tag |
+| **Non-repudiation** | HMAC-SHA256 + SHA-256 hash chain append-only audit log — every upload, download, and verification attempt is recorded; entry modifications are detected by HMAC, deletions are detected by the hash chain |
 
 ---
 
@@ -125,7 +125,7 @@ File ID + Keys + Password
 | `crypto/signatures.py` | RSA-PSS-SHA256 | RFC 8017 §9.1 | Sign-then-encrypt ordering; `PSS.MAX_LENGTH` salt (32 B) maximises security margin |
 | `crypto/kdf.py` | PBKDF2-HMAC-SHA256 | NIST SP 800-132 | 600k iterations (2023 minimum); 128-bit random salt per derivation |
 | `crypto/fingerprint.py` | SHA-256 | FIPS 180-4 | Collision-resistant commitment to plaintext; compatible with `sha256sum` for out-of-band verify |
-| `audit/log.py` | HMAC-SHA256 | RFC 2104 | Tamper-evident log entries; attacker without `AUDIT_LOG_KEY` cannot forge a valid HMAC |
+| `audit/log.py` | HMAC-SHA256 + SHA-256 hash chain | RFC 2104 | HMAC detects entry modifications; each entry's `prev_hash` (SHA-256 of the previous entry) detects deletions — removing any entry breaks the chain for all subsequent entries |
 
 ---
 
@@ -153,7 +153,7 @@ python3 app.py
 1. **`/keys`** — Generate RSA-2048 and P-256 EC keypairs. Use the **Copy** or **Download** buttons next to each key; the server never stores private keys.
 2. **`/` (Upload)** — Choose Mode A (RSA) or Mode B (ECDH+PFS), paste the relevant public key and your signing private key, upload a file.
 3. **`/download/<id>`** — Paste the matching private key; the app verifies the signature, decrypts, checks the fingerprint, and serves the file. A success banner confirms that signature verification passed before the download starts.
-4. **`/audit`** (Activity) — Every event is listed with its HMAC verification status. Successful and failed attempts (signature failures, wrong keys) are all recorded. Tampered entries are flagged.
+4. **`/audit`** (Activity) — Every event is listed with its HMAC and chain verification status. Successful and failed attempts (signature failures, wrong keys) are all recorded. Modified entries are flagged as TAMPERED; deleted entries break the hash chain and are flagged as CHAIN BREAK.
 
 ### Run tests
 
