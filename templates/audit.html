@@ -17,7 +17,7 @@
         <th title="First 8 characters of the file's unique ID">File ID</th>
         <th title="Encryption mode used — RSA (Mode A) or ECDH (Mode B)">Mode</th>
         <th title="IP address of the client that triggered the event">Client IP</th>
-        <th title="HMAC integrity of this entry, and whether it is correctly linked to the previous entry (chain). A CHAIN BREAK means one or more entries were deleted.">Integrity</th>
+        <th title="Whether this log entry's HMAC matches — TAMPERED means this specific record was modified after it was written">Integrity</th>
       </tr>
     </thead>
     <tbody>
@@ -29,15 +29,10 @@
         <td>{{ entry.get('mode', '—') }}</td>
         <td>{{ entry.get('ip_address', '—') }}</td>
         <td>
-          {% if entry.hmac_ok and entry.chain_ok %}
+          {% if entry.hmac_ok %}
             <span class="ok">OK</span>
           {% else %}
-            {% if not entry.chain_ok %}
-              <span class="tampered" title="This entry's prev_hash does not match the hash of the preceding entry — one or more log entries were deleted before this one.">CHAIN BREAK</span>
-            {% endif %}
-            {% if not entry.hmac_ok %}
-              <span class="tampered" title="This entry's HMAC does not match — the record was modified after it was written.">TAMPERED</span>
-            {% endif %}
+            <span class="tampered" title="This entry's HMAC does not match — the record was modified after it was written. Do not trust this event.">TAMPERED</span>
           {% endif %}
         </td>
       </tr>
