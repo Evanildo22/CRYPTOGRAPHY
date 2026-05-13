@@ -152,8 +152,8 @@ python3 app.py
 
 1. **`/keys`** — Generate RSA-2048 and P-256 EC keypairs. Use the **Copy** or **Download** buttons next to each key; the server never stores private keys.
 2. **`/` (Upload)** — Choose Mode A (RSA) or Mode B (ECDH+PFS), paste the relevant public key and your signing private key, upload a file.
-3. **`/download/<id>`** — Paste the matching private key; the app verifies the signature, decrypts, checks the fingerprint, and serves the file.
-4. **`/audit`** (Activity) — Every event is listed with its HMAC verification status. Tampered entries are flagged.
+3. **`/download/<id>`** — Paste the matching private key; the app verifies the signature, decrypts, checks the fingerprint, and serves the file. A success banner confirms that signature verification passed before the download starts.
+4. **`/audit`** (Activity) — Every event is listed with its HMAC verification status. Successful and failed attempts (signature failures, wrong keys) are all recorded. Tampered entries are flagged.
 
 ### Run tests
 
