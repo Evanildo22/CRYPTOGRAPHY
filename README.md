@@ -3,10 +3,16 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-3.0.3-000000?logo=flask&logoColor=white)
 ![cryptography](https://img.shields.io/badge/cryptography-42.0.5-orange)
-![Tests](https://img.shields.io/badge/tests-83%20unit%20%2B%206%20benchmarks-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-blue)
+[![Tests](https://github.com/Evanildo22/CRYPTOGRAPHY/actions/workflows/tests.yml/badge.svg)](https://github.com/Evanildo22/CRYPTOGRAPHY/actions/workflows/tests.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A web application that demonstrates end-to-end applied cryptography: files are encrypted before storage, every ciphertext is signed to prove uploader identity, and every security event is written to a tamper-evident audit log. The system offers two encryption modes, RSA key transport and ECDH with perfect forward secrecy — so the same upload pipeline illustrates both how traditional PKI works and how ephemeral key agreement (the mechanism behind TLS 1.3 and Signal) provides a stronger forward-secrecy guarantee. Nothing in this project is theoretical: every primitive is wired into a running Flask application with 83 unit tests that verify tamper detection, round-trip correctness, and the no-disk-write guarantee for ephemeral keys.
+SecureShare is a Flask web application that demonstrates applied cryptography end to end. Files are encrypted before storage, every ciphertext is signed to prove who uploaded it, and every security event is written to a tamper-evident audit log.
+
+It offers two encryption modes: RSA key transport, and ECDH with perfect forward secrecy (the mechanism behind TLS 1.3 and Signal). The same upload pipeline therefore shows both how traditional public-key encryption works and what ephemeral key agreement adds.
+
+Every primitive is wired into the running application and covered by 100 tests that verify tamper detection, round-trip correctness through the web routes, and the no-disk-write guarantee for ephemeral keys.
+
+![SecureShare upload page](docs/screenshots/upload.png)
 
 > **Threat model:** [`THREAT_MODEL.md`](THREAT_MODEL.md) covers assets, seven adversary profiles, attack trees for each threat, mitigations with residual risks, and an explicit list of what this system does *not* protect against.
 
@@ -16,7 +22,7 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 
 | Goal | Mechanism |
 |---|---|
-| **Confidentiality** | AES-256-GCM — files are unreadable without the session key |
+| **Confidentiality** | AES-256-GCM — the file key is derived from both the session key and a password, so decryption needs the recipient's private key *and* the password |
 | **Integrity** | GCM 128-bit auth tag — any ciphertext modification raises `InvalidTag` before plaintext is released |
 | **Authenticity** | RSA-PSS-SHA256 over ciphertext — verified before decryption; wrong key or tampered bytes abort the request |
 | **Forward Secrecy** | ECDH P-256 ephemeral keypair — private key destroyed after derivation; past sessions safe after long-term key compromise (Mode B) |
@@ -39,7 +45,7 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 │    │                                │                      │            │
 │    ▼                                ▼                      ▼            │
 │  crypto/kdf.py              crypto/signatures.py     audit/log.py       │
-│  PBKDF2 → KEK               RSA-PSS verify first     HMAC re-verify     │
+│  PBKDF2 → password key      RSA-PSS verify first     HMAC re-verify     │
 │    │                                │                                   │
 │    ├── Mode A ──────────────────────┤                                   │
 │    │   crypto/rsa_keys.py           │                                   │
@@ -81,18 +87,19 @@ A web application that demonstrates end-to-end applied cryptography: files are e
 ```
 File + Password + Mode
        │
-       ├─ PBKDF2-HMAC-SHA256 (600k iter, 128-bit salt) ──► KEK
+       ├─ PBKDF2-HMAC-SHA256 (600k iter, 128-bit salt) ──► password key
        ├─ SHA-256 fingerprint of plaintext stored for post-decrypt verify
        │
-       ├─ Mode A: generate random AES-256 key
+       ├─ Mode A: generate random 256-bit session key
        │          RSA-OAEP wrap with recipient public key → .key
        │
-       └─ Mode B: ephemeral P-256 keygen  (crypto/pfs.py)
-       |          ECDH + HKDF-SHA256 → AES-256 session key
-       |          ephemeral private key zeroed + discarded immediately
-       |          ephemeral public key stored → .ecpub
+       ├─ Mode B: ephemeral P-256 keygen  (crypto/pfs.py)
+       │          ECDH + HKDF-SHA256 → 256-bit session key
+       │          ephemeral private key zeroed + discarded immediately
+       │          ephemeral public key stored → .ecpub
        │
-       ├─ AES-256-GCM encrypt plaintext → .enc  (tag prepended for early rejection)
+       ├─ HKDF-SHA256(session key ‖ password key) ──► file key
+       ├─ AES-256-GCM encrypt plaintext with file key → .enc  (tag prepended for early rejection)
        ├─ RSA-PSS-SHA256 sign ciphertext → .sig
        └─ HMAC-SHA256 audit log entry appended
 ```
@@ -104,9 +111,11 @@ File ID + Keys + Password
        │
        ├─ RSA-PSS verify signature  ──► ABORT on InvalidSignature (before any decryption)
        │
-       ├─ Mode A: RSA-OAEP unwrap .key → AES session key
-       └─ Mode B: ECDH (recipient static priv + stored .ecpub) + HKDF → AES session key
+       ├─ Mode A: RSA-OAEP unwrap .key → session key
+       ├─ Mode B: ECDH (recipient static priv + stored .ecpub) + HKDF → session key
        │
+       ├─ PBKDF2 (password + stored salt) → password key
+       ├─ HKDF-SHA256(session key ‖ password key) ──► file key
        ├─ AES-256-GCM decrypt  ──► ABORT on InvalidTag (any ciphertext tampering)
        ├─ SHA-256 recompute + compare to stored fingerprint
        └─ HMAC-SHA256 audit log entry appended
@@ -122,8 +131,8 @@ File ID + Keys + Password
 | `crypto/rsa_keys.py` | RSA-2048 OAEP | RFC 8017 | OAEP is IND-CCA2 secure; PKCS#1 v1.5 is vulnerable to Bleichenbacher 1998 |
 | `crypto/ecdh.py` | ECDH P-256 + HKDF-SHA256 | RFC 5869 | Raw ECDH output is a curve point, not uniform random; HKDF extracts + expands to a proper key |
 | `crypto/pfs.py` | Ephemeral key lifecycle | TLS 1.3 §4.2.8 | Private key zeroed via `ctypes.memset` immediately after HKDF; never written to disk |
-| `crypto/signatures.py` | RSA-PSS-SHA256 | RFC 8017 §9.1 | Sign-then-encrypt ordering; `PSS.MAX_LENGTH` salt (32 B) maximises security margin |
-| `crypto/kdf.py` | PBKDF2-HMAC-SHA256 | NIST SP 800-132 | 600k iterations (2023 minimum); 128-bit random salt per derivation |
+| `crypto/signatures.py` | RSA-PSS-SHA256 | RFC 8017 §9.1 | Encrypt-then-sign ordering (the signature covers the ciphertext); `PSS.MAX_LENGTH` salt (32 B) maximises security margin |
+| `crypto/kdf.py` | PBKDF2-HMAC-SHA256, HKDF-SHA256 combiner | NIST SP 800-132, RFC 5869 | 600k iterations (2023 minimum); 128-bit random salt per derivation. The password key is combined with the session key, so a stolen private key alone does not decrypt a file |
 | `crypto/fingerprint.py` | SHA-256 | FIPS 180-4 | Collision-resistant commitment to plaintext; compatible with `sha256sum` for out-of-band verify |
 | `audit/log.py` | HMAC-SHA256 + SHA-256 hash chain | RFC 2104 | Hybrid approach: per-entry HMAC flags modified rows as TAMPERED; `prev_hash` chain detects deletions and surfaces them as a summary banner, avoiding cascade noise on unmodified rows |
 
@@ -134,7 +143,7 @@ File ID + Keys + Password
 **Prerequisites:** Python 3.11+, pip
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/CRYPTOGRAPHY.git
+git clone https://github.com/Evanildo22/CRYPTOGRAPHY.git
 cd CRYPTOGRAPHY
 pip install -r requirements.txt
 ```
@@ -151,14 +160,14 @@ python3 app.py
 **Workflow:**
 
 1. **`/keys`** — Generate RSA-2048 and P-256 EC keypairs. Use the **Copy** or **Download** buttons next to each key; the server never stores private keys.
-2. **`/` (Upload)** — Choose Mode A (RSA) or Mode B (ECDH+PFS), paste the relevant public key and your signing private key, upload a file.
-3. **`/download/<id>`** — Paste the matching private key; the app verifies the signature, decrypts, checks the fingerprint, and serves the file. A success banner confirms that signature verification passed before the download starts.
+2. **`/` (Upload)** — Choose Mode A (RSA) or Mode B (ECDH+PFS), paste the recipient's public key and the sender's signing private key, set a password, then upload a file.
+3. **`/download/<id>`** — Paste the matching private key and enter the upload password; the app verifies the signature, decrypts, checks the fingerprint, and serves the file. A success banner confirms that signature verification passed before the download starts.
 4. **`/audit`** (Activity) — Every event is listed with its integrity status. Successful and failed attempts (signature failures, wrong keys) are all recorded. Modified entries are flagged as TAMPERED on the row; deletions break the hash chain and are reported in a summary banner without cascading noise into individual rows.
 
 ### Run tests
 
 ```bash
-pytest tests/ -m "not benchmark" -v   # 83 unit tests, ~6s
+pytest tests/ -m "not benchmark" -v   # 100 tests, ~10s
 pytest tests/test_aes.py -m benchmark -v -s   # 6 throughput benchmarks (1/10/100 MiB)
 ```
 
@@ -172,6 +181,7 @@ CRYPTOGRAPHY/
 ├── config.py                Single source of truth for all security constants
 ├── requirements.txt         Pinned dependencies (supply chain hygiene)
 ├── THREAT_MODEL.md          Adversary profiles, attack trees, residual risks
+├── LICENSE                  MIT
 ├── CHANGELOG.md             Version history
 │
 ├── crypto/
@@ -180,24 +190,25 @@ CRYPTOGRAPHY/
 │   ├── ecdh.py              P-256        —  ephemeral keygen, ECDH + HKDF
 │   ├── pfs.py               PFS          —  ephemeral key lifecycle + zeroisation
 │   ├── signatures.py        RSA-PSS      —  sign / verify over ciphertext
-│   ├── kdf.py               PBKDF2       —  password → 256-bit key
+│   ├── kdf.py               PBKDF2       —  password key + file-key combiner
 │   └── fingerprint.py       SHA-256      —  plaintext commitment + verify
 │
 ├── audit/
-│   └── log.py               HMAC-SHA256 append-only tamper-evident log
+│   └── log.py               HMAC-SHA256 + hash-chained append-only audit log
 │
 ├── storage/                 Encrypted artefacts (never plaintext)
 ├── templates/               Jinja2 HTML templates
 ├── static/                  CSS + JS
-├── demo/                    Demo script and walkthrough README
-└── tests/                   83 unit tests + 6 AES throughput benchmarks
+├── docs/                    README screenshot
+├── demo/                    Terminal walkthrough of the full pipeline
+└── tests/                   100 tests + 6 AES throughput benchmarks
 ```
 
 ---
 
 ## Tests
 
-Each module has a dedicated test file. Tests verify both the happy path and failure modes.
+Each module has a dedicated test file, and `test_app.py` drives the full upload and download flow through the Flask routes. Tests verify both the happy path and failure modes.
 
 | File | What is tested |
 |---|---|
@@ -206,9 +217,10 @@ Each module has a dedicated test file. Tests verify both the happy path and fail
 | `tests/test_ecdh.py` | Both-sides-agree, output length, HKDF determinism, different-salt isolation, PEM round-trip |
 | `tests/test_pfs.py` | Session key length, recipient reproduction, independent exchanges, **no disk writes during exchange** |
 | `tests/test_signatures.py` | Valid signature passes, tampered ciphertext aborts, wrong key aborts, PSS non-determinism |
-| `tests/test_kdf.py` | Output length, determinism, salt uniqueness, string/bytes equivalence, Unicode passwords |
+| `tests/test_kdf.py` | Output length, determinism, salt uniqueness, string/bytes equivalence, Unicode passwords; file key changes if either the session key or the password key changes |
 | `tests/test_fingerprint.py` | Known SHA-256 vectors, single-bit sensitivity, constant-time comparison, case insensitivity |
 | `tests/test_audit.py` | Append + read, HMAC verification, field tamper detection, deletion detection, extra-field invalidation |
+| `tests/test_app.py` | End-to-end round trip in both modes; wrong password fails with the right private key; wrong private key fails with the right password; failures are audit-logged |
 
 ---
 
@@ -227,7 +239,7 @@ Versions are pinned to prevent silent upgrades that could introduce vulnerabilit
 
 ## What Happens If This Is Implemented Incorrectly
 
-Every decision in this codebase has a specific failure mode if made differently. These are the four most consequential ones, and the questions most likely to come up in a security interview.
+Every decision in this codebase has a specific failure mode if made differently. These are the four most consequential ones.
 
 ---
 
@@ -253,7 +265,7 @@ GCM uses the IV to initialise a keystream (CTR mode). If two messages are encryp
 
 IV reuse also breaks authentication. The GHASH key for GCM is derived from `AES(key, IV)`. If the same IV is reused, the attacker can recover the GHASH key by solving a polynomial equation over GF(2^128) from two observed (ciphertext, tag) pairs. Once they have the GHASH key they can forge authentication tags for arbitrary messages under that key-IV pair, completely defeating the integrity guarantee.
 
-This is not hypothetical. The BEAST attack against TLS 1.0 and the nonce-reuse vulnerabilities in several real-world AES-GCM deployments exploited exactly this property.
+This is not hypothetical. Böck et al. ("Nonce-Disrespecting Adversaries", 2016) found public HTTPS servers that repeated AES-GCM nonces and showed practical forgery attacks against them, and KRACK (2017) broke WPA2 by forcing clients to reinstall a key and reuse nonces.
 
 **What this project does instead:** `os.urandom(12)` is called inside `aes.encrypt()` on every invocation, the IV is never accepted as a parameter from the caller. The random IV is stored alongside the ciphertext so the recipient can decrypt, but the caller has no way to accidentally or deliberately reuse it. The test `test_different_ivs_per_call` asserts that two encryptions of the same plaintext produce different IVs.
 
@@ -261,13 +273,11 @@ This is not hypothetical. The BEAST attack against TLS 1.0 and the nonce-reuse v
 
 ### 3. Skipping signature verification before decryption
 
-If signature verification is optional, deferred, or performed after decryption, an attacker gains a decryption oracle.
+If signature verification is optional, deferred, or performed after decryption, the system loses its authenticity guarantee.
 
-AES-GCM is malleable at the ciphertext level in a specific way: an attacker who knows the plaintext value at offset N can flip exactly the bits they want at offset N by XOR-ing the corresponding ciphertext byte, and then adjust the authentication tag to match (if they have the GHASH key, which IV reuse above gives them). Without a signature check, the server will decrypt attacker-supplied ciphertexts and return the results.
+The GCM tag only proves that a ciphertext was produced by someone who knew the session key. In both modes that key is established against the recipient's *public* key, so anyone with write access to storage can encrypt a file of their choosing, replace the stored artefacts, and GCM will accept the result as valid. Only the signature binds the stored blob to the uploader's private key. Without it, the recipient cannot tell whether a file came from the claimed sender or was substituted.
 
-More concretely: in a system where decryption errors are returned with different HTTP status codes or response timing than authentication errors, an attacker can mount a padding oracle or tag-forgery attack by observing which errors occur for which inputs. The attacker learns information about the key with each query.
-
-Beyond oracle attacks, skipping verification means the system provides no authenticity guarantee at all. Any party who can upload a file can replace its ciphertext with content of their choosing, the recipient has no way to know whether the file came from the claimed sender or was substituted in transit.
+Verifying first also means no key unwrapping or decryption work is ever done on unauthenticated input. Every forged request fails at the same point and in the same way, which removes the opportunity to learn anything from differences in error messages or timing further down the pipeline.
 
 **What this project does instead:** In `app.py`'s download route, `signatures.verify_ciphertext()` is called first, before any key material is loaded or any decryption attempt is made. If it raises `InvalidSignature`, the request is aborted and the event is logged as `VERIFY_FAIL`. The decryption code is unreachable without a valid signature. The test `test_tampered_ciphertext_body_raises` verifies that a single-bit flip in the ciphertext fails the signature check.
 
@@ -283,7 +293,7 @@ A subtler variant is deriving the key deterministically from a low-entropy sourc
 
 The same problem applies to using a constant salt in PBKDF2. Without a random per-derivation salt, two users with the same password get the same derived key. An attacker can precompute a rainbow table over the fixed salt and crack all passwords simultaneously rather than one at a time.
 
-**What this project does instead:** The AES session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous — all zeros is an obvious placeholder, not a functioning key — and the comment explicitly marks it as requiring an override.
+**What this project does instead:** The session key is either `os.urandom(32)` (Mode A) or derived from a fresh ephemeral ECDH exchange (Mode B) — neither path has a constant — and the file key is derived from it together with the password key. The PBKDF2 salt is `os.urandom(16)` inside `kdf.derive_key()`, generated on every call unless the caller explicitly passes a stored salt for reproduction. The audit log HMAC key is loaded from the `AUDIT_LOG_KEY` environment variable with no in-code default that would work in production. The `config.py` default of `"0" * 64` is visually conspicuous — all zeros is an obvious placeholder, not a functioning key — and the comment explicitly marks it as requiring an override.
 
 ---
 

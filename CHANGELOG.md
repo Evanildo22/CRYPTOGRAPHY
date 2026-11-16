@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- The upload password now takes part in encryption. The PBKDF2 password key is combined with the session key (HKDF-SHA256) to produce the AES file key, so decryption requires both the recipient's private key and the password. Previously the key was derived but never used. Files stored by earlier versions can no longer be decrypted.
+
+### Added
+- `tests/test_app.py`: end-to-end upload and download tests through the Flask routes, including wrong-password and wrong-key failures (100 tests in total).
+- `LICENSE` (MIT) and a GitHub Actions workflow that runs the unit tests on every push and pull request.
+- Screenshot of the upload page in the README.
+
+### Fixed
+- Documentation described the signature ordering as "sign-then-encrypt"; the code has always signed the ciphertext (encrypt-then-sign).
+- README cited BEAST as an AES-GCM nonce-reuse attack; replaced with accurate references.
+- `THREAT_MODEL.md` now reflects the hash-chained audit log.
+
+---
+
+## [1.1.0] — 2026-05-13
+
+### Added
+- SHA-256 hash chain in the audit log: each entry stores `prev_hash`, so deleted entries are detected.
+- `VERIFY_FAIL` and `DECRYPT_FAIL` audit events; failed attempts are highlighted in the Activity Log.
+- Success banner after decryption confirming the signature was verified.
+- Copy and download buttons, section headings and a private-key warning on the Keys page.
+
+### Changed
+- Audit viewer uses a hybrid report: modified entries are flagged per row via HMAC, chain breaks appear once in a summary banner.
+- Audit timestamps are shown in the browser's local time; the full file ID appears on hover.
+- Clearer UI copy and error messages across all pages.
+
+---
+
 ## [1.0.0] — 2026-04-09
 
 ### Added
@@ -14,7 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `rsa_keys.py` — RSA-2048 keypair generation, PEM serialisation, and OAEP key-wrap / unwrap. PKCS#1 v1.5 explicitly excluded (Bleichenbacher vulnerability).
 - `ecdh.py` — P-256 ephemeral keypair generation, ECDH exchange, HKDF-SHA256 derivation to 256-bit AES key. Domain-separation `info` label prevents cross-context key reuse.
 - `pfs.py` — Perfect Forward Secrecy lifecycle module. Generates ephemeral keypair, derives session key, zeroes private key bytes via `ctypes.memset`, and returns only the public key + derived session key. Never writes to disk.
-- `signatures.py` — RSA-PSS-SHA256 sign / verify over ciphertext (sign-then-encrypt ordering). `PSS.MAX_LENGTH` salt (32 bytes) provides maximum security margin.
+- `signatures.py` — RSA-PSS-SHA256 sign / verify over ciphertext (encrypt-then-sign ordering). `PSS.MAX_LENGTH` salt (32 bytes) provides maximum security margin.
 - `kdf.py` — PBKDF2-HMAC-SHA256 at 600,000 iterations with 128-bit random salt. Derives 256-bit KEK from user password. NIST SP 800-132 compliant iteration count.
 - `fingerprint.py` — SHA-256 plaintext commitment. Computed at upload, verified post-decrypt. Constant-time comparison via `hmac.compare_digest`.
 

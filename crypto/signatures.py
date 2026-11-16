@@ -4,8 +4,9 @@ crypto/signatures.py — RSA-PSS digital signatures over ciphertext.
 Design decisions
 ----------------
 * Signatures are computed over the *ciphertext*, not the plaintext.  This
-  follows the "sign-then-encrypt" ordering recommended by Bellare & Namprempre
-  (2000): the signature covers exactly what is stored and transmitted,
+  is encrypt-then-sign, mirroring the encrypt-then-authenticate ordering
+  analysed by Bellare & Namprempre (2000): the signature covers exactly
+  what is stored and transmitted,
   binding the uploader's identity to the specific encrypted blob.
 * RSA-PSS (Probabilistic Signature Scheme) is used instead of PKCS#1 v1.5
   signatures.  PKCS#1 v1.5 signing has known forgery vulnerabilities in

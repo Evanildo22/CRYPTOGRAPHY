@@ -1,12 +1,12 @@
-# Threat Model — Secure File Share
+# Threat Model — SecureShare
 
-> **Reading guide for reviewers:** This document follows a structured threat-modelling methodology: assets → adversaries → attack trees → mitigations → residual risks → explicit non-goals. Limitations are stated honestly rather than glossed over. A system with documented residual risks is more trustworthy than one that claims to have none.
+> **Reading guide:** This document follows a structured threat-modelling methodology: assets → adversaries → attack trees → mitigations → residual risks → explicit non-goals. Limitations are stated honestly rather than glossed over. A system with documented residual risks is more trustworthy than one that claims to have none.
 
 ---
 
 ## 1. System Description
 
-Secure File Share is a web application that encrypts files before storage, signs ciphertext to bind uploader identity, and records every security-relevant event in a tamper-evident audit log. It supports two encryption modes:
+SecureShare is a web application that encrypts files before storage, signs ciphertext to bind uploader identity, and records every security-relevant event in a tamper-evident audit log. It supports two encryption modes:
 
 - **Mode A — RSA Key Transport:** A random 256-bit AES session key is wrapped with the recipient's RSA-2048 public key (OAEP). Only the matching private key can unwrap it.
 - **Mode B — ECDH + PFS:** An ephemeral P-256 keypair is generated per upload; ECDH + HKDF derive the AES session key; the ephemeral private key is immediately destroyed and never written to disk. Compromise of the recipient's long-term key cannot expose past sessions.
@@ -45,7 +45,7 @@ What this system is trying to protect, why it has value, and what happens if it 
 | Asset | Sensitivity | Location | Impact if Compromised |
 |---|---|---|---|
 | **File plaintext** | Critical | RAM only; never persisted unencrypted | Direct data breach — primary objective of any attacker |
-| **AES session key** | Critical | RAM; persisted only as RSA-wrapped (Mode A) or ECDH-derived (Mode B) | Enables decryption of the associated file |
+| **AES session key** | Critical | RAM; persisted only as RSA-wrapped (Mode A) or ECDH-derived (Mode B) | Combined with the password key, enables decryption of the associated file |
 | **RSA private key (recipient)** | Critical | Client-side only — never sent to server | Mode A: enables decryption of all past + future wrapped files. Mode B: enables future decryption only (PFS protects past sessions) |
 | **EC private key (recipient)** | Critical | Client-side only | Mode B: enables reproduction of ECDH for future sessions; past sessions protected by PFS |
 | **RSA private key (signer)** | Critical | Client-side only | Enables forgery of upload signatures, breaking authenticity guarantee |
@@ -55,7 +55,7 @@ What this system is trying to protect, why it has value, and what happens if it 
 | **Ephemeral EC public keys (`.ecpub`)** | Low | `storage/keys/` | Public values — safe to expose by design; needed for recipient to reproduce ECDH |
 | **Signatures (`.sig`)** | Medium | `storage/sigs/` | Deletion prevents integrity verification; forgery requires private key |
 | **Plaintext fingerprints (`.sha256`)** | Low | `storage/fingerprints/` | SHA-256 is one-way — reveals only a hash of the file, not the file |
-| **Audit log (`.log`)** | High | `storage/audit/` | Deletion or tampering destroys non-repudiation; detected by HMAC re-verification |
+| **Audit log (`.log`)** | High | `storage/audit/` | Deletion or tampering destroys non-repudiation; edits are detected by HMAC re-verification, deletions by the hash chain |
 
 ---
 
@@ -135,11 +135,11 @@ Each adversary is characterised by their **access level**, **goals**, and **assu
 
 ### ADV-7 — Offline Password Attacker
 
-**Who:** Anyone who obtains the `.key` file and has GPU/ASIC compute resources.
+**Who:** Anyone who has stolen the recipient's private key along with the stored artefacts, and has GPU/ASIC compute resources.
 
-**Access:** The wrapped AES session key file and the stored PBKDF2 salt. No access to the server.
+**Access:** The recipient's private key, the ciphertext, the wrapped session key or ephemeral public key, and the stored PBKDF2 salt. No access to the server.
 
-**Goal:** Recover the user's password via brute force or dictionary attack, then rederive the KEK to unwrap the session key.
+**Goal:** Recover the upload password via brute force or dictionary attack. The file key is derived from the session key *and* the password key, so the private key alone is not enough; each password guess costs one PBKDF2 run plus one AES-GCM tag check. Without the private key the attacker cannot test guesses at all.
 
 ---
 
@@ -236,10 +236,13 @@ GOAL: Modify a past log entry without detection
 │           ⚠ RESIDUAL RISK: full server compromise defeats log integrity
 │
 ├── Delete entire log entries
-│   └── Detected only if the log consumer tracks expected entry count
-│       ⚠ RESIDUAL RISK: deletion of entries is not detected by HMAC alone
-│         A production system would use a hash-chained log (each entry includes
-│         hash of the previous entry) to make deletion detectable
+│   ├── Delete an entry from the middle of the log
+│   │   └── Next entry's prev_hash no longer matches its predecessor
+│   │       └── Audit viewer reports a chain break in a summary banner
+│   └── Delete the most recent entries (truncate the tail)
+│       ⚠ RESIDUAL RISK: the remaining chain is still valid; detecting
+│         truncation needs an external anchor (e.g. the latest hash
+│         shipped to a separate system)
 │
 └── Delete the log file entirely
     └── Detected — audit viewer reports "no entries" rather than entries
@@ -247,7 +250,7 @@ GOAL: Modify a past log entry without detection
           requires separate monitoring to detect unexpected log absence
 ```
 
-**Verdict:** HMAC-SHA256 prevents silent field modification. Deletion and full-server-compromise are residual risks.
+**Verdict:** HMAC-SHA256 prevents silent field modification and the SHA-256 hash chain exposes deleted or reordered entries. Tail truncation and full server compromise are residual risks.
 
 ---
 
@@ -346,20 +349,21 @@ GOAL: Decrypt past sessions after obtaining long-term private key
 
 | Property | Detail |
 |---|---|
-| **What it provides** | Derives a KEK from a user password; resists offline brute-force |
+| **What it provides** | Derives a password key that is combined with the session key (HKDF-SHA256 over `session_key ‖ password_key`) to produce the AES file key. Decryption needs both the recipient's private key and the password; the password is a second factor if the private key is stolen |
 | **Iterations** | 600,000 — NIST SP 800-132 (2023) minimum for SHA-256 |
 | **Salt** | 128-bit random, stored alongside key material |
 | **Residual risk** | PBKDF2 is CPU-bound, not memory-hard. A GPU cluster can compute ~10^9 PBKDF2-SHA256 iterations/second (amortised). A 600k-iteration check takes ~0.6 ms on a GPU, yielding ~1.6M password checks/second. An 8-character lowercase-alpha password (~38 bits of entropy) falls in ~4 hours on a modern GPU. Users must choose strong passwords. |
 | **Known limitation** | Argon2id (winner of the Password Hashing Competition, 2015) is strictly superior: it is memory-hard, making GPU/ASIC attacks ~1000× more expensive. This implementation uses PBKDF2 as the well-known baseline. A production system should use Argon2id. |
 
-### Audit Log — HMAC-SHA256 Append-Only
+### Audit Log — HMAC-SHA256 + SHA-256 Hash Chain, Append-Only
 
 | Property | Detail |
 |---|---|
-| **What it provides** | Tamper-evidence: modification of any field invalidates the stored HMAC |
+| **What it provides** | Tamper-evidence: modification of any field invalidates the stored HMAC; each entry also stores `prev_hash`, the SHA-256 of the previous entry, so deleting or reordering entries breaks the chain |
+| **How it is reported** | Modified entries are flagged TAMPERED on their own row; chain breaks appear once in a summary banner, so one deletion does not mark every later row |
 | **Key** | 256-bit secret from environment variable — never stored in code |
 | **Canonical form** | Sorted-key JSON, no extra whitespace — deterministic across platforms |
-| **Residual risk** | HMAC detects modification of individual entries but does not detect deletion or reordering. A hash-chained log (each entry includes `H(previous_entry)`) would make deletion detectable at the cost of implementation complexity. |
+| **Residual risk** | Removing the most recent entries leaves a shorter but still valid chain. Detecting truncation requires anchoring the latest hash outside the server. |
 | **Residual risk** | Full server compromise (`AUDIT_LOG_KEY` readable from env) enables undetectable forgery. Mitigation requires a write-only log shipped to a separate system (SIEM, append-only S3 bucket with bucket-level WORM policy). |
 
 ---
@@ -447,9 +451,8 @@ This model is valid only while the following hold:
 | Priority | Change | Threat Addressed |
 |---|---|---|
 | P0 | Deploy behind TLS (nginx/Caddy) | AT-1, AT-2, AT-5 transit interception |
-| P0 | Replace PBKDF2 with Argon2id | AT-7 GPU brute force |
-| P1 | Hash-chain audit log entries | AT-4 entry deletion undetected |
-| P1 | Ship audit log to external append-only store | AT-4 full server compromise |
+| P0 | Replace PBKDF2 with Argon2id | ADV-7 GPU brute force |
+| P1 | Ship audit log to external append-only store | AT-4 tail truncation, full server compromise |
 | P1 | Add file-ID and timestamp to RSA-PSS signed payload | AT-2 signature detachment |
 | P2 | Add `--require-hashes` to pip install | Supply chain |
 | P2 | Migrate asymmetric operations to CRYSTALS-Kyber + Dilithium | Post-quantum |

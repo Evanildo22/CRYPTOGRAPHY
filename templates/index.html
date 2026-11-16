@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Secure File Share — Upload{% endblock %}
+{% block title %}SecureShare — Upload{% endblock %}
 
 {% block content %}
 <section class="hero">
-  <h1>Secure File Share</h1>
+  <h1>SecureShare</h1>
   <p>Hybrid encryption with two key-exchange modes, digital signatures, perfect forward secrecy, and a tamper-evident audit log.</p>
 </section>
 
@@ -23,7 +23,7 @@
     </div>
     <div class="concept-card">
       <h3>Audit Log</h3>
-      <p>Every security event is recorded with an HMAC-SHA256 tag. Edits to past entries are detectable without the server secret.</p>
+      <p>Every security event is recorded with an HMAC-SHA256 tag and chained to the previous entry by hash. Edited or deleted entries are detected when the log is viewed.</p>
     </div>
   </div>
 </section>
@@ -36,8 +36,8 @@
     <input id="file" name="file" type="file" required />
 
     <label for="password">
-      Password — used to derive your encryption key
-      <span class="tooltip" title="Your password is never stored. It is run through PBKDF2-HMAC-SHA256 (600,000 iterations) to produce a key-encryption key (KEK) that wraps your session key.">ⓘ</span>
+      Password — required again to decrypt
+      <span class="tooltip" title="Your password is never stored. It is run through PBKDF2-HMAC-SHA256 (600,000 iterations) and combined with the session key to produce the file key. Decryption needs both the recipient's private key and this password.">ⓘ</span>
     </label>
     <input id="password" name="password" type="password" required autocomplete="new-password" />
 
@@ -70,7 +70,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD…
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASC…
 -----END PRIVATE KEY-----"></textarea>
 
-    <button type="submit">Encrypt &amp; upload</button>
+    <button type="submit">Encrypt &amp; Upload</button>
   </form>
 </section>
 

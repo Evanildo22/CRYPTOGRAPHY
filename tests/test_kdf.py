@@ -9,12 +9,13 @@ Coverage:
   * Auto-generated salt is 16 bytes and unique per call
   * String and bytes passwords produce the same result
   * Empty password is accepted (weak but not an error)
+  * File key needs both the session key and the password key
 """
 
 import os
 import pytest
 
-from crypto.kdf import derive_key
+from crypto.kdf import derive_file_key, derive_key
 from config import PBKDF2_SALT_BYTES, PBKDF2_KEY_BYTES
 
 
@@ -77,3 +78,37 @@ class TestInputHandling:
     def test_unicode_password(self):
         key, _ = derive_key("p\u00e4ssw\u00f6rd\u00df")   # German characters
         assert len(key) == PBKDF2_KEY_BYTES
+
+
+class TestFileKey:
+    """derive_file_key binds the session key to the password key."""
+
+    def test_length_and_determinism(self):
+        session_key, password_key = os.urandom(32), os.urandom(32)
+        file_key = derive_file_key(session_key, password_key)
+        assert len(file_key) == 32
+        assert file_key == derive_file_key(session_key, password_key)
+
+    def test_differs_from_both_inputs(self):
+        session_key, password_key = os.urandom(32), os.urandom(32)
+        file_key = derive_file_key(session_key, password_key)
+        assert file_key not in (session_key, password_key)
+
+    def test_wrong_password_key_changes_file_key(self):
+        session_key = os.urandom(32)
+        assert derive_file_key(session_key, os.urandom(32)) != derive_file_key(session_key, os.urandom(32))
+
+    def test_wrong_session_key_changes_file_key(self):
+        password_key = os.urandom(32)
+        assert derive_file_key(os.urandom(32), password_key) != derive_file_key(os.urandom(32), password_key)
+
+    def test_inputs_are_not_interchangeable(self):
+        a, b = os.urandom(32), os.urandom(32)
+        assert derive_file_key(a, b) != derive_file_key(b, a)
+
+    @pytest.mark.parametrize("bad", [b"", os.urandom(16), os.urandom(33)])
+    def test_rejects_wrong_lengths(self, bad):
+        with pytest.raises(ValueError):
+            derive_file_key(bad, os.urandom(32))
+        with pytest.raises(ValueError):
+            derive_file_key(os.urandom(32), bad)

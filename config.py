@@ -50,6 +50,9 @@ RSA_KEY_SIZE_BITS: int = 2048   # Minimum recommended by NIST through 2030
 HKDF_INFO:          bytes = b"secure-file-share-session-key-v1"
 HKDF_DERIVED_BYTES: int   = 32   # 256-bit AES key from HKDF output
 
+# Domain-separation label for combining the session key with the password key
+FILE_KEY_INFO:      bytes = b"secure-file-share-file-key-v1"
+
 # ---------------------------------------------------------------------------
 # Audit log
 # ---------------------------------------------------------------------------

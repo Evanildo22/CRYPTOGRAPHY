@@ -12,20 +12,29 @@ Design decisions
   salt prevents rainbow-table attacks and ensures that two users with the
   same password get different derived keys.  It is stored alongside the
   wrapped key material so it can be reproduced on download.
-* The derived key is a Key-Encryption Key (KEK): it protects the AES
-  session key, not the file data directly.  This layering (password →
-  PBKDF2 → KEK → AES-GCM → file data) means that a password change only
-  requires re-wrapping the session key, not re-encrypting the entire file.
-* In Mode B, the HKDF output from the ECDH exchange plays the equivalent
-  role of the KEK — the PBKDF2 layer in Mode B is therefore optional and
-  is used as a second factor rather than the primary key protection.
+* The derived password key never encrypts file data on its own.  It is
+  combined with the session key (RSA-transported in Mode A, ECDH-derived
+  in Mode B) by ``derive_file_key`` to produce the AES-256-GCM file key.
+  Decryption therefore needs both the recipient's private key and the
+  password; either one alone yields nothing.
+* The combiner is HKDF-SHA256 over ``session_key || password_key`` with a
+  domain-separation label.  Both inputs are fixed-length (32 bytes), so
+  the concatenation is unambiguous.  As long as either input is secret
+  and uniformly random, the output is indistinguishable from random — the
+  same construction used for hybrid key exchange in TLS 1.3.
 """
 
 import os
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
-from config import PBKDF2_ITERATIONS, PBKDF2_SALT_BYTES, PBKDF2_KEY_BYTES
+from config import (
+    FILE_KEY_INFO,
+    PBKDF2_ITERATIONS,
+    PBKDF2_KEY_BYTES,
+    PBKDF2_SALT_BYTES,
+)
 
 
 def derive_key(password: str | bytes, salt: bytes | None = None) -> tuple[bytes, bytes]:
@@ -45,7 +54,7 @@ def derive_key(password: str | bytes, salt: bytes | None = None) -> tuple[bytes,
     tuple[bytes, bytes]
         ``(derived_key, salt)``
 
-        * ``derived_key`` — 32-byte pseudorandom key (use as KEK or AES key).
+        * ``derived_key`` — 32-byte password key (input to ``derive_file_key``).
         * ``salt`` — the salt used; store this alongside the ciphertext.
 
     Notes
@@ -67,3 +76,36 @@ def derive_key(password: str | bytes, salt: bytes | None = None) -> tuple[bytes,
         iterations=PBKDF2_ITERATIONS,
     )
     return kdf.derive(password), salt
+
+
+def derive_file_key(session_key: bytes, password_key: bytes) -> bytes:
+    """
+    Combine the session key and the password key into the AES-256-GCM file key.
+
+    Parameters
+    ----------
+    session_key:
+        32-byte key from RSA key transport (Mode A) or ECDH + HKDF (Mode B).
+    password_key:
+        32-byte key from ``derive_key``.
+
+    Returns
+    -------
+    bytes
+        32-byte file key.  Reproducing it requires both inputs.
+
+    Raises
+    ------
+    ValueError
+        If either input is not exactly 32 bytes.
+    """
+    if len(session_key) != PBKDF2_KEY_BYTES or len(password_key) != PBKDF2_KEY_BYTES:
+        raise ValueError("session_key and password_key must each be 32 bytes")
+
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=PBKDF2_KEY_BYTES,
+        salt=None,
+        info=FILE_KEY_INFO,
+    )
+    return hkdf.derive(session_key + password_key)

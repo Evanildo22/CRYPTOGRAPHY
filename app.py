@@ -3,24 +3,26 @@ app.py — Flask application: route definitions for secure-file-share.
 
 Upload flow (both modes):
     1. Receive file + password + mode
-    2. Derive KEK via PBKDF2
+    2. Derive password key via PBKDF2
     3. Compute SHA-256 plaintext fingerprint
-    4. Mode A: generate random AES key, wrap with RSA-OAEP
-       Mode B: ephemeral ECDH via pfs.py → derive AES key → destroy ephem. privkey
-    5. Encrypt file with AES-256-GCM
-    6. Sign ciphertext with RSA-PSS
-    7. Persist: .enc, .key/.ecpub, .sig, .sha256, .salt, .meta
-    8. Append audit log entry
+    4. Mode A: generate random session key, wrap with RSA-OAEP
+       Mode B: ephemeral ECDH via pfs.py → session key → destroy ephem. privkey
+    5. Combine session key + password key (HKDF) → file key
+    6. Encrypt file with AES-256-GCM under the file key
+    7. Sign ciphertext with RSA-PSS
+    8. Persist: .enc, .key/.ecpub, .sig, .sha256, .meta (includes PBKDF2 salt)
+    9. Append audit log entry
 
 Download flow:
     1. Load ciphertext, signature, fingerprint, key material
     2. Verify RSA-PSS signature — abort if invalid
-    3. Mode A: unwrap AES key with RSA-OAEP private key
-       Mode B: reproduce ECDH + HKDF to recover AES key
-    4. Decrypt AES-256-GCM — abort if auth tag fails
-    5. Verify SHA-256 fingerprint
-    6. Serve file + display fingerprint
-    7. Append audit log entry
+    3. Mode A: unwrap session key with RSA-OAEP private key
+       Mode B: reproduce ECDH + HKDF to recover session key
+    4. Re-derive password key (stored salt) and combine → file key
+    5. Decrypt AES-256-GCM — abort if auth tag fails
+    6. Verify SHA-256 fingerprint
+    7. Serve file + display fingerprint
+    8. Append audit log entry
 """
 
 import json
@@ -168,11 +170,15 @@ def upload():
         flash("File is empty.", "error")
         return redirect(url_for("index"))
 
+    if not password:
+        flash("A password is required.", "error")
+        return redirect(url_for("index"))
+
     file_id   = str(uuid.uuid4())
     fp_hex    = fingerprint.compute(plaintext)
 
-    # --- Key derivation (both modes add PBKDF2 layer) ---
-    _kek, salt = kdf.derive_key(password)
+    # --- Password key (both modes): combined with the session key below ---
+    password_key, salt = kdf.derive_key(password)
 
     try:
         if mode == "A":
@@ -187,7 +193,8 @@ def upload():
             session_key = os.urandom(32)
             wrapped_key = rsa_keys.wrap_key(session_key, recipient_pub)
 
-            ciphertext  = aes.encrypt(plaintext, session_key)
+            file_key    = kdf.derive_file_key(session_key, password_key)
+            ciphertext  = aes.encrypt(plaintext, file_key)
             sig         = signatures.sign_ciphertext(ciphertext, signer_priv)
 
             STORAGE_KEYS.joinpath(f"{file_id}.key").write_bytes(wrapped_key)
@@ -204,7 +211,8 @@ def upload():
 
             session_key, ephem_pub_pem = perform_pfs_exchange(recipient_ec_pub)
 
-            ciphertext = aes.encrypt(plaintext, session_key)
+            file_key   = kdf.derive_file_key(session_key, password_key)
+            ciphertext = aes.encrypt(plaintext, file_key)
             sig        = signatures.sign_ciphertext(ciphertext, signer_priv)
 
             STORAGE_KEYS.joinpath(f"{file_id}.ecpub").write_bytes(ephem_pub_pem)
@@ -302,11 +310,13 @@ def download_page(file_id: str):
             ephem_pub         = load_ec_public_key(ephem_pub_pem)
             session_key       = derive_shared_key(recipient_ec_priv, ephem_pub)
 
-        plaintext = aes.decrypt(ciphertext, session_key)
+        password_key, _ = kdf.derive_key(password, bytes.fromhex(meta["salt"]))
+        file_key        = kdf.derive_file_key(session_key, password_key)
+        plaintext       = aes.decrypt(ciphertext, file_key)
 
     except InvalidTag:
         append_entry("DECRYPT_FAIL", file_id, meta["mode"], _client_ip())
-        flash("Wrong key or password — the file could not be decrypted. Check you're using the correct private key.", "error")
+        flash("Wrong key or password — the file could not be decrypted. Check the private key and the password used at upload.", "error")
         return redirect(url_for("download_page", file_id=file_id))
     except ValueError:
         append_entry("DECRYPT_FAIL", file_id, meta["mode"], _client_ip())
